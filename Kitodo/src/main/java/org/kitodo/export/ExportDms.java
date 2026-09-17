@@ -17,9 +17,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.stream.Collectors;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
@@ -33,6 +33,7 @@ import org.kitodo.data.database.converter.ProcessConverter;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.exceptions.ConfigurationException;
 import org.kitodo.exceptions.ExportException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.MetadataException;
 import org.kitodo.production.enums.ProcessState;
 import org.kitodo.production.helper.Helper;
@@ -51,6 +52,7 @@ import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.production.services.file.FileService;
 import org.kitodo.production.services.workflow.WorkflowControllerService;
+import org.xml.sax.SAXException;
 
 public class ExportDms extends ExportMets {
     private static final Logger logger = LogManager.getLogger(ExportDms.class);
@@ -61,7 +63,7 @@ public class ExportDms extends ExportMets {
     private final ProcessService processService = ServiceManager.getProcessService();
 
     private boolean exportWithImages = true;
-
+    private boolean optimisticExportFlagSet = false;
     private Task workFlowTask;
 
     public ExportDms() {
@@ -80,12 +82,14 @@ public class ExportDms extends ExportMets {
      *
      * @param task
      *            Task object
-     * @throws IOException
+     * @throws IOException / SAXException
      *             if I/O fails while running a script for a script condition of
      *             a subsequent task, or the METS file cannot be read when
      *             evaluating an XPath condition
+     * @throws FileStructureValidationException
+     *             when closing task via WorkflowControllerService fails
      */
-    public void startExport(Task task) throws DAOException, IOException {
+    public void startExport(Task task) throws DAOException, IOException, SAXException, FileStructureValidationException {
         if (startExport(task.getProcess())) {
             new WorkflowControllerService().close(task);
         }
@@ -107,13 +111,14 @@ public class ExportDms extends ExportMets {
         if (wasNotAlreadyExported) {
             process.setExported(true);
             processService.save(process);
+            this.optimisticExportFlagSet = true;
         }
 
         boolean exportSuccessful = startExport(process, (URI) null);
         if (Objects.nonNull(process.getParent())) {
             startExport(process.getParent());
         }
-        if (wasNotAlreadyExported) {
+        if (wasNotAlreadyExported && !ConfigCore.getBooleanParameterOrDefaultValue(ParameterCore.ASYNCHRONOUS_AUTOMATIC_EXPORT)) {
             process.setExported(exportSuccessful);
             processService.save(process);
         }
@@ -157,10 +162,10 @@ public class ExportDms extends ExportMets {
         try {
             return startExport(process,
                 processService.readMetadataFile(process).getDigitalDocument());
-        } catch (IOException | DAOException e) {
+        } catch (IOException | DAOException | SAXException | FileStructureValidationException e) {
             if (Objects.nonNull(exportDmsTask)) {
                 exportDmsTask.setException(e);
-                logger.error(Helper.getTranslation(ERROR_EXPORT, process.getTitle()), e);
+                logger.error(Helper.getTranslation(Locale.ENGLISH, ERROR_EXPORT, process.getTitle()), e);
             } else {
                 Helper.setErrorMessage(ERROR_EXPORT, new Object[] {process.getTitle() }, logger, e);
             }
@@ -178,7 +183,7 @@ public class ExportDms extends ExportMets {
      * @return boolean
      */
     private boolean startExport(Process process, LegacyMetsModsDigitalDocumentHelper newFile)
-            throws IOException, DAOException {
+            throws IOException, DAOException, SAXException, FileStructureValidationException {
 
         this.myPrefs = ServiceManager.getRulesetService().getPreferences(process.getRuleset());
 
@@ -219,7 +224,8 @@ public class ExportDms extends ExportMets {
     }
 
     private boolean prepareExportLocation(Process process,
-            LegacyMetsModsDigitalDocumentHelper gdzfile) throws IOException, DAOException {
+            LegacyMetsModsDigitalDocumentHelper gdzfile) throws IOException, DAOException, SAXException,
+            FileStructureValidationException {
 
         URI hotfolder = new File(process.getProject().getDmsImportRootPath()).toURI();
         String processTitle = Helper.getNormalizedTitle(process.getTitle());
@@ -246,7 +252,7 @@ public class ExportDms extends ExportMets {
     }
 
     private boolean exportImagesAndMetsToDestinationUri(Process process, LegacyMetsModsDigitalDocumentHelper gdzfile,
-            URI destination) throws IOException, DAOException {
+            URI destination) throws IOException, DAOException, SAXException, FileStructureValidationException {
 
         if (exportWithImages) {
             try {
@@ -302,7 +308,7 @@ public class ExportDms extends ExportMets {
         } catch (RuntimeException e) {
             if (Objects.nonNull(exportDmsTask)) {
                 exportDmsTask.setException(e);
-                logger.error(Helper.getTranslation(ERROR_EXPORT, process.getTitle()), e);
+                logger.error(Helper.getTranslation(Locale.ENGLISH, ERROR_EXPORT, process.getTitle()), e);
             } else {
                 Helper.setErrorMessage(ERROR_EXPORT, new Object[] {process.getTitle() }, logger, e);
             }
@@ -311,7 +317,7 @@ public class ExportDms extends ExportMets {
     }
 
     private boolean asyncExportWithImport(Process process, LegacyMetsModsDigitalDocumentHelper gdzfile, URI userHome)
-            throws IOException, DAOException {
+            throws IOException, DAOException, SAXException, FileStructureValidationException {
 
         String atsPpnBand = Helper.getNormalizedTitle(process.getTitle());
         if (Objects.nonNull(exportDmsTask)) {
@@ -342,6 +348,15 @@ public class ExportDms extends ExportMets {
      */
     public Task getWorkflowTask() {
         return workFlowTask;
+    }
+
+    /**
+     * Returns whether the optimistic export flag is set.
+     *
+     * @return true if the optimistic export flag is set; false otherwise
+     */
+    public boolean isOptimisticExportFlagSet() {
+        return optimisticExportFlagSet;
     }
 
     /**
@@ -431,8 +446,7 @@ public class ExportDms extends ExportMets {
      */
     private void directoryDownload(Process process, URI destination) throws IOException, InterruptedException, URISyntaxException {
         Collection<Subfolder> processDirs = process.getProject().getFolders().parallelStream()
-                .filter(Folder::isCopyFolder).map(folder -> new Subfolder(process, folder))
-                .collect(Collectors.toList());
+                .filter(Folder::isCopyFolder).map(folder -> new Subfolder(process, folder)).toList();
         VariableReplacer variableReplacer = new VariableReplacer(null, process, null);
 
         String uriToDestination = destination.toString();

@@ -12,6 +12,7 @@
 package org.kitodo.production.forms.dataeditor;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
@@ -36,12 +37,12 @@ public class StructureTreeOperations {
      * 
      * @param root the root tree node
      */
-    public static void clearTreeNodeSelection(TreeNode root) {
-        Deque<TreeNode> stack = new ArrayDeque<>();
+    public static void clearTreeNodeSelection(TreeNode<Object> root) {
+        Deque<TreeNode<Object>> stack = new ArrayDeque<>();
         stack.push(root);
 
         while (!stack.isEmpty()) {
-            TreeNode node = stack.pop();
+            TreeNode<Object> node = stack.pop();
             node.setSelected(false);
             stack.addAll(node.getChildren());
         }
@@ -52,8 +53,8 @@ public class StructureTreeOperations {
      * 
      * @param nodes the set of nodes that are marked as selected
      */
-    public static void selectTreeNodes(Set<TreeNode> nodes) {
-        for (TreeNode node : nodes) {
+    public static void selectTreeNodes(Set<TreeNode<Object>> nodes) {
+        for (TreeNode<Object> node : nodes) {
             node.setSelected(true);
         }
     }
@@ -64,13 +65,13 @@ public class StructureTreeOperations {
      * @param root the root tree node
      * @return the number of selected tree nodes
      */
-    public static int getNumberOfSelectedTreeNodes(TreeNode root) {
+    public static int getNumberOfSelectedTreeNodes(TreeNode<Object> root) {
         int count = 0;
-        Deque<TreeNode> stack = new ArrayDeque<>();
+        Deque<TreeNode<Object>> stack = new ArrayDeque<>();
         stack.push(root);
 
         while (!stack.isEmpty()) {
-            TreeNode node = stack.pop();
+            TreeNode<Object> node = stack.pop();
             if (node.isSelected()) {
                 count += 1;
             }
@@ -87,13 +88,13 @@ public class StructureTreeOperations {
      * @param criteria the criteria function
      * @return the set of tree nodes that match the criteria function
      */
-    public static Set<TreeNode> findTreeNodeMatchingCriteria(TreeNode root, Function<TreeNode, Boolean> criteria) {
-        Set<TreeNode> matches = new HashSet<>();
-        Deque<TreeNode> stack = new ArrayDeque<>();
+    public static Set<TreeNode<Object>> findTreeNodeMatchingCriteria(TreeNode<Object> root, Function<TreeNode<Object>, Boolean> criteria) {
+        Set<TreeNode<Object>> matches = new HashSet<>();
+        Deque<TreeNode<Object>> stack = new ArrayDeque<>();
         stack.push(root);
 
         while (!stack.isEmpty()) {
-            TreeNode node = stack.pop();
+            TreeNode<Object> node = stack.pop();
             if (criteria.apply(node)) {
                 matches.add(node);
             }
@@ -109,7 +110,7 @@ public class StructureTreeOperations {
      * @param node the tree node
      * @return the physical division or null
      */
-    public static PhysicalDivision getPhysicalDivisionFromTreeNode(TreeNode node) {
+    public static PhysicalDivision getPhysicalDivisionFromTreeNode(TreeNode<Object> node) {
         if (Objects.nonNull(node) && node.getData() instanceof StructureTreeNode) {
             StructureTreeNode structureTreeNode = (StructureTreeNode) node.getData();
 
@@ -134,7 +135,7 @@ public class StructureTreeOperations {
      * @param node the tree node
      * @return the pair of physical division and its parent logical division or null
      */
-    public static ImmutablePair<PhysicalDivision, LogicalDivision> getPhysicalDivisionPairFromTreeNode(TreeNode node) {
+    public static ImmutablePair<PhysicalDivision, LogicalDivision> getPhysicalDivisionPairFromTreeNode(TreeNode<Object> node) {
         if (Objects.nonNull(node) && node.getData() instanceof StructureTreeNode) {
             StructureTreeNode structureTreeNode = (StructureTreeNode) node.getData();
 
@@ -143,7 +144,7 @@ public class StructureTreeOperations {
                 View view = (View) structureTreeNode.getDataObject();
 
                 // find logical division from tree node parent
-                TreeNode parent = node.getParent();
+                TreeNode<Object> parent = node.getParent();
                 if (Objects.nonNull(parent) && parent.getData() instanceof StructureTreeNode) {
                     StructureTreeNode parentStructureTreeNode = (StructureTreeNode) parent.getData();
                     if (parentStructureTreeNode.getDataObject() instanceof LogicalDivision) {
@@ -160,7 +161,7 @@ public class StructureTreeOperations {
                 PhysicalDivision physicalDivision = (PhysicalDivision) structureTreeNode.getDataObject();
 
                 if (!physicalDivision.getLogicalDivisions().isEmpty()) {
-                    return new ImmutablePair<>(physicalDivision, physicalDivision.getLogicalDivisions().get(0));
+                    return new ImmutablePair<>(physicalDivision, physicalDivision.getLogicalDivisions().getFirst());
                 } else {
                     return new ImmutablePair<>(physicalDivision, null);
                 }
@@ -175,7 +176,7 @@ public class StructureTreeOperations {
      * @param node the tree node
      * @return the logical division or null
      */
-    public static LogicalDivision getLogicalDivisionFromTreeNode(TreeNode node) {
+    public static LogicalDivision getLogicalDivisionFromTreeNode(TreeNode<Object> node) {
         if (Objects.nonNull(node) && node.getData() instanceof StructureTreeNode) {
             StructureTreeNode structureTreeNode = (StructureTreeNode) node.getData();
             if (structureTreeNode.getDataObject() instanceof LogicalDivision) {
@@ -193,15 +194,15 @@ public class StructureTreeOperations {
      * @param logicalDivisions the logical divisions
      * @return the set of tree nodes matching the provided physical and logical divisions
      */
-    public static Set<TreeNode> findTreeNodesMatchingDivisions(
-        TreeNode root, 
+    public static Set<TreeNode<Object>> findTreeNodesMatchingDivisions(
+        TreeNode<Object> root,
         List<Pair<PhysicalDivision, LogicalDivision>> physicalDivisions, 
         List<LogicalDivision> logicalDivisions
     ) {
-        Set<TreeNode> matchingTreeNodes = new HashSet<>();
+        Set<TreeNode<Object>> matchingTreeNodes = new HashSet<>();
 
         if (!logicalDivisions.isEmpty()) {
-            matchingTreeNodes.addAll(findTreeNodeMatchingCriteria(root, (TreeNode node) -> {
+            matchingTreeNodes.addAll(findTreeNodeMatchingCriteria(root, (TreeNode<Object> node) -> {
                     // do not use List.contains operation, which uses content based "equals"-methods of Division class
                     // and there can be multiple divisions that are essentially equal (same properties)
                     // but each have their own tree node
@@ -217,7 +218,7 @@ public class StructureTreeOperations {
         }
 
         if (!physicalDivisions.isEmpty()) {
-            matchingTreeNodes.addAll(findTreeNodeMatchingCriteria(root, (TreeNode node) -> {
+            matchingTreeNodes.addAll(findTreeNodeMatchingCriteria(root, (TreeNode<Object> node) -> {
                 // do not use List.contains operation, which uses content based "equals"-methods of Division class
                 // and there can be multiple logical divisions that are essentially equal (same properties)
                 // but each have their own tree node
@@ -242,7 +243,7 @@ public class StructureTreeOperations {
      * Return the logical parent tree node of a node if it is a physical division node, or 
      * itself if it is a logical node.
      */
-    public static TreeNode getTreeNodeLogicalParentOrSelf(TreeNode node) {
+    public static TreeNode<Object> getTreeNodeLogicalParentOrSelf(TreeNode<Object> node) {
         if (Objects.isNull(node)) {
             return null;
         }
@@ -260,4 +261,25 @@ public class StructureTreeOperations {
         }
         return null;
     }
+
+    /**
+     * Return all descendants of a tree node while preserving the order of all nodes.
+     * @param root the node to get descendants of
+     * @return list containing all descendants of the given root node
+     */
+    public static List<TreeNode<Object>> getDescendantsInOrder(TreeNode<Object> root) {
+        List<TreeNode<Object>> out = new ArrayList<>();
+        collectDescendantsInOrder(root, out);
+        return out;
+    }
+
+
+    private static void collectDescendantsInOrder(TreeNode<Object> node, List<TreeNode<Object>> out) {
+        for (TreeNode<Object> child : node.getChildren()) {
+            out.add(child);
+            collectDescendantsInOrder(child, out);
+        }
+    }
+
+
 }

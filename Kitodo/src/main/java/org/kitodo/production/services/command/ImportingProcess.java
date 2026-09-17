@@ -58,6 +58,7 @@ import org.kitodo.data.database.beans.Project;
 import org.kitodo.data.database.beans.Task;
 import org.kitodo.data.database.beans.Template;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.InvalidImagesException;
 import org.kitodo.exceptions.MediaNotFoundException;
 import org.kitodo.exceptions.ProcessGenerationException;
@@ -70,6 +71,7 @@ import org.kitodo.production.services.data.TaskService;
 import org.kitodo.production.services.dataformat.MetsService;
 import org.kitodo.production.services.file.FileService;
 import org.kitodo.production.services.validation.MetadataValidationService;
+import org.xml.sax.SAXException;
 
 /**
  * A process to import. For each process to be imported (that is, a process
@@ -185,10 +187,11 @@ final class ImportingProcess {
      *            presence of child processes
      */
     void validate(RulesetManagementInterface ruleset, boolean strictValidation,
-            Map<String, ImportingProcess> importingProcesses) throws IOException, DAOException {
+            Map<String, ImportingProcess> importingProcesses) throws IOException, DAOException, SAXException,
+            FileStructureValidationException {
 
         this.importingProcesses = importingProcesses;
-        logger.info("Starting to validate " + this.directoryName);
+        logger.info("Starting to validate {}", this.directoryName);
         Path metaFilePath = sourceDir.resolve(META_FILE_NAME);
         Workpiece workpiece = metsService.loadWorkpiece(metaFilePath.toUri());
         validateMetsFile(ruleset, strictValidation, workpiece);
@@ -201,8 +204,8 @@ final class ImportingProcess {
         baseType = workpiece.getLogicalStructure().getType();
         title = formProcessTitle(ruleset, workpiece);
 
-        logger.info("Validation of " + this.directoryName + (errors.isEmpty() ? " completed without errors"
-                : " completed with errors:" + lineSeparator() + String.join(lineSeparator(), errors)));
+        logger.info("Validation of {}{}", this.directoryName, errors.isEmpty() ? " completed without errors" : " completed with errors:"
+                + lineSeparator() + String.join(lineSeparator(), errors));
     }
 
     /**
@@ -409,7 +412,7 @@ final class ImportingProcess {
      *             if media files are missing
      */
     void executeAction(int action) throws IOException, DAOException, ProcessGenerationException,
-            MediaNotFoundException, InvalidImagesException {
+            MediaNotFoundException, InvalidImagesException, SAXException, FileStructureValidationException {
 
         assert action >= 0 && action <= numberOfFileSystemItems + 1
                 : "action out of range: " + action + " [0.." + (numberOfFileSystemItems + 1) + "]";
@@ -431,8 +434,8 @@ final class ImportingProcess {
      * @param action
      *            processing step
      */
-    private void executeActionForCorrectProcess(int action) throws IOException, DAOException,
-            ProcessGenerationException, DAOException, InvalidImagesException, MediaNotFoundException {
+    private void executeActionForCorrectProcess(int action) throws IOException, ProcessGenerationException, DAOException,
+            InvalidImagesException, MediaNotFoundException, SAXException, FileStructureValidationException {
 
         if (action == 0) {
             if (Objects.nonNull(processTitleRule) && Objects.isNull(title)) {
@@ -441,7 +444,7 @@ final class ImportingProcess {
                     workpiece.getLogicalStructure().getMetadata());
             }
             processId = createDatabaseProcess();
-            logger.info("Created process #" + processId);
+            logger.info("Created process #{}", processId);
         } else if (action == 1) {
             createBaseDirectory(processId.toString());
             filesAndDirectoriesIterator = filesAndDirectories.iterator();
@@ -495,7 +498,8 @@ final class ImportingProcess {
      *            the newly created process
      */
     private void copyAndAdjustMetsFile(Process process)
-            throws IOException, InvalidImagesException, MediaNotFoundException, DAOException {
+            throws IOException, InvalidImagesException, MediaNotFoundException, DAOException, SAXException,
+            FileStructureValidationException {
 
         Workpiece workpiece = metsService.loadWorkpiece(sourceDir.resolve(META_FILE_NAME).toUri());
         workpiece.setId(processId.toString());
@@ -510,7 +514,7 @@ final class ImportingProcess {
         fileService.searchForMedia(process, workpiece);
         Path outputMetsFile = outputDir.resolve(META_FILE_NAME);
         metsService.saveWorkpiece(workpiece, outputMetsFile.toUri());
-        logger.info("Wrote METS file " + outputMetsFile);
+        logger.info("Wrote METS file {}", outputMetsFile);
     }
 
     private void addLinkInDatabase(Process parent, Integer childProcessId) throws DAOException {
@@ -544,7 +548,7 @@ final class ImportingProcess {
             } else {
                 Files.write(errorFile, errors, StandardCharsets.UTF_8);
             }
-            logger.info("Wrote errors file " + errorFile);
+            logger.info("Wrote errors file {}", errorFile);
         } else {
             copyDirectoryOrFile(filesAndDirectories.get(action - 2));
         }
@@ -575,7 +579,7 @@ final class ImportingProcess {
     private void createBaseDirectory(String directoryName) throws IOException {
         outputDir = copyToRoot.resolve(directoryName);
         Files.createDirectories(outputDir);
-        logger.info("Created process directory " + outputDir);
+        logger.info("Created process directory {}", outputDir);
     }
 
     /**
@@ -590,11 +594,11 @@ final class ImportingProcess {
         Path destinationItem = outputDir.resolve(relativeItem);
         if (Files.isDirectory(sourceItem)) {
             Files.createDirectories(destinationItem);
-            logger.info("Created directory " + destinationItem);
+            logger.info("Created directory {}", destinationItem);
         } else {
             Files.copy(sourceItem, destinationItem, StandardCopyOption.REPLACE_EXISTING,
                 StandardCopyOption.COPY_ATTRIBUTES, LinkOption.NOFOLLOW_LINKS);
-            logger.info("Copied " + sourceItem + " as " + destinationItem);
+            logger.info("Copied {} as {}", sourceItem, destinationItem);
         }
     }
 

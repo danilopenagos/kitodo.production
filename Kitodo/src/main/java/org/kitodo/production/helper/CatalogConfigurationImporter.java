@@ -125,7 +125,7 @@ public class CatalogConfigurationImporter {
             importConfiguration.setUsername(OPACConfig.getUsername(opacTitle));
             importConfiguration.setPassword(OPACConfig.getPassword(opacTitle));
         } catch (ConfigurationRuntimeException e) {
-            logger.info("No credentials configured for configuration '" + opacTitle + "'.");
+            logger.info("No credentials configured for configuration '{}'.", opacTitle);
         }
     }
 
@@ -150,7 +150,7 @@ public class CatalogConfigurationImporter {
         // set MetadataFormat to "OTHER" if configuration contains a value different from the options in the
         // "MetadataFormat.java" enum!
         String metadataFormat = OPACConfig.getMetadataFormat(opacTitle).toUpperCase();
-        if (Arrays.stream(MetadataFormat.values()).map(MetadataFormat::name).collect(Collectors.toList())
+        if (Arrays.stream(MetadataFormat.values()).map(MetadataFormat::name).toList()
                 .contains(metadataFormat)) {
             importConfiguration.setMetadataFormat(metadataFormat);
         } else {
@@ -232,8 +232,8 @@ public class CatalogConfigurationImporter {
                 mappingFiles.add(getConfiguredMappingFile(allMappingFiles, filename, configuration));
             }
         } catch (ConfigurationRuntimeException e) {
-            logger.info("No 'mappingFiles' element found in catalog configuration '" + configuration.getTitle()
-                    + "', trying to determine default mapping files.");
+            logger.info("No 'mappingFiles' element found in catalog configuration '{}', trying to determine default mapping files.",
+                    configuration.getTitle());
             String formatName = OPACConfig.getMetadataFormat(configuration.getTitle());
             MetadataFormat metadataFormat = MetadataFormat.getMetadataFormat(formatName);
             List<MetadataFormatConversion> defaultConversions = MetadataFormatConversion
@@ -359,7 +359,7 @@ public class CatalogConfigurationImporter {
                     }
                 }
             } catch (ConfigurationRuntimeException e) {
-                logger.error("Unable to import OPAC configuration '" + catalogName + "' (" + e.getMessage() + ")");
+                logger.error("Unable to import OPAC configuration '{}' ({})", catalogName, e.getMessage());
             }
         }
         return allMappingFiles;

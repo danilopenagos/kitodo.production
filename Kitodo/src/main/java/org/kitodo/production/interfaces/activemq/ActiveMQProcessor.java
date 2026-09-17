@@ -16,11 +16,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-import javax.jms.JMSException;
-import javax.jms.MapMessage;
-import javax.jms.Message;
-import javax.jms.MessageConsumer;
-import javax.jms.MessageListener;
+import jakarta.jms.JMSException;
+import jakarta.jms.MapMessage;
+import jakarta.jms.Message;
+import jakarta.jms.MessageConsumer;
+import jakarta.jms.MessageListener;
 
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
@@ -50,7 +50,7 @@ public abstract class ActiveMQProcessor implements MessageListener {
     /**
      * The name of the queue from which this processor is processing messages.
      */
-    private String queueName;
+    private final String queueName;
 
     /**
      * The message consumer object that actually receives the messages and
@@ -147,7 +147,7 @@ public abstract class ActiveMQProcessor implements MessageListener {
         SecurityUserDetails securityUserDetails = new SecurityUserDetails(user);
         Authentication auth = new UsernamePasswordAuthenticationToken(securityUserDetails, null,
                 securityUserDetails.getAuthorities());
-        Client clientId = ServiceManager.getClientService().getById(user.getClients().get(0).getId());
+        Client clientId = ServiceManager.getClientService().getById(user.getClients().getFirst().getId());
         securityUserDetails.setSessionClient(clientId);
         securityContext.setAuthentication(auth);
     }

@@ -43,8 +43,8 @@ public class ProcessDetailIT {
         titleDocMain.setValue("Lorem Ipsum");
         division.getMetadata().add(titleDocMain);
         ProcessFieldedMetadata processFieldedMetadata = new ProcessFieldedMetadata(division, divisionView, ruleset);
-        TreeNode treeNode = processFieldedMetadata.getTreeNode();
-        ProcessDetail processDetail = (ProcessDetail) treeNode.getChildren().get(0).getData();
+        TreeNode<Object> treeNode = processFieldedMetadata.getTreeNode();
+        ProcessDetail processDetail = (ProcessDetail) treeNode.getChildren().getFirst().getData();
         int beforeCopying = treeNode.getChildCount();
         processDetail.copy();
         assertEquals(beforeCopying + 1, treeNode.getChildCount(), "Should have copied metadata");

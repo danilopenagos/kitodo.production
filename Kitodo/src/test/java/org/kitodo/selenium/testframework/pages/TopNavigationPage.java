@@ -13,6 +13,7 @@ package org.kitodo.selenium.testframework.pages;
 
 import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
 import org.kitodo.selenium.testframework.Browser;
@@ -30,63 +31,67 @@ public class TopNavigationPage extends Page<TopNavigationPage> {
     private static final String ARGUMENTS_CLICK = "arguments[0].click()";
     private static final String LINK_PROCESSES_ID = "linkProcessesNavigationForm:linkProcesses";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "user-menu")
     private WebElement userMenuButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "logout-form:logout")
     private WebElement logoutButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "dashboard-menu")
     private WebElement dashboardMenuButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "dashboard-menu-header")
     private WebElement dashboardMenuHeader;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkTasks")
     private WebElement linkTasks;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = LINK_PROCESSES_ID)
     private WebElement linkProcesses;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkProjects")
     private WebElement linkProjects;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkUsers")
     private WebElement linkUsers;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkModules")
     private WebElement linkModules;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkClients")
     private WebElement linkClients;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkHelp")
     private WebElement linkHelp;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "linkSystem")
     private WebElement linkSystem;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "sessionClient")
+    private WebElement sessionClientLabel;
+
+    @SuppressWarnings(UNUSED)
     @FindBy(className = "ui-selectonemenu-trigger")
     private WebElement clientSelectTrigger;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "select-session-client-form:setSessionClientButton")
     private WebElement acceptClientSelectionButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "select-session-client-form:cancelSessionClientSelectionButton")
     private WebElement cancelClientSelectionButton;
 
@@ -107,20 +112,26 @@ public class TopNavigationPage extends Page<TopNavigationPage> {
                 .until(() -> userMenuButton.isDisplayed());
         RemoteWebDriver driver = Browser.getDriver();
         ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("logout-form:logout")));
-        WebDriverWait webDriverWait = new WebDriverWait(driver, 60);
+        WebDriverWait webDriverWait = new WebDriverWait(driver, Duration.ofSeconds(60));
         webDriverWait.until(ExpectedConditions.urlContains(Pages.getLoginPage().getUrl()));
     }
 
-    public String getSessionClient() throws InterruptedException {
-        await("Wait for visible user menu button").atMost(30, TimeUnit.SECONDS).ignoreExceptions()
+    public String getSessionClient() throws InterruptedException{
+        // in case the page is still loading
+        await("Wait for visible user menu button").atMost(5, TimeUnit.SECONDS).ignoreExceptions()
                 .until(() -> userMenuButton.isDisplayed());
 
         userMenuButton.click();
-        WebElement element = Browser.getDriver().findElementById("sessionClient").findElement(By.tagName("b"));
-        return element.getText();
+        
+        // make sure overlay is shown
+        await("Wait for user menu overlay").atMost(5, TimeUnit.SECONDS).ignoreExceptions()
+                .until(() -> sessionClientLabel.isDisplayed());
+
+        // extract session client name from user menu overlay
+        return sessionClientLabel.findElement(By.tagName("b")).getText();
     }
 
-    public void acceptClientSelection() throws IllegalAccessException, InstantiationException {
+    public void acceptClientSelection() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(acceptClientSelectionButton, Pages.getDesktopPage().getUrl());
     }
 
@@ -144,49 +155,55 @@ public class TopNavigationPage extends Page<TopNavigationPage> {
      * Hovers dashboard menu and clicks on link to help page.
      */
     void gotoHelp() {
-        RemoteWebDriver driver = Browser.getDriver();
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("linkHelp")));
+        clickNavigationLink("linkHelp");
     }
 
     /**
      * Hovers dashboard menu and clicks on link to tasks page.
      */
     void gotoTasks() throws InterruptedException {
-        RemoteWebDriver driver = Browser.getDriver();
         Thread.sleep(Browser.getDelayAfterDelete());
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("linkTasks")));
+        clickNavigationLink("linkTasks");
     }
 
     /**
      * Hovers dashboard menu and clicks on link to processes page.
      */
     void gotoProcesses() {
-        RemoteWebDriver driver = Browser.getDriver();
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id(LINK_PROCESSES_ID)));
+        clickNavigationLink(LINK_PROCESSES_ID);
     }
 
     /**
      * Hovers dashboard menu and clicks on link to projects page.
      */
     void gotoProjects() {
-        RemoteWebDriver driver = Browser.getDriver();
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("linkProjects")));
+        clickNavigationLink("linkProjects");
     }
 
     /**
      * Hovers dashboard menu and clicks on link to users page.
      */
     void gotoUsers() {
-        RemoteWebDriver driver = Browser.getDriver();
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("linkUsers")));
+        clickNavigationLink("linkUsers");
     }
 
     /**
      * Hovers dashboard menu and clicks on link to system page.
      */
     void gotoSystem() {
+        clickNavigationLink("linkSystem");
+    }
+
+    /**
+     * Waits until the navigation link with the given ID is present in the DOM and clicks it.
+     *
+     * @param linkId ID of the navigation link
+     */
+    private void clickNavigationLink(String linkId) {
         RemoteWebDriver driver = Browser.getDriver();
-        ((JavascriptExecutor) driver).executeScript(ARGUMENTS_CLICK, driver.findElement(By.id("linkSystem")));
+        WebDriverWait webDriverWait = new WebDriverWait(driver, Duration.ofSeconds(5));
+        webDriverWait.until(ExpectedConditions.presenceOfElementLocated(By.id(linkId)));
+        driver.executeScript(ARGUMENTS_CLICK, driver.findElement(By.id(linkId)));
     }
 
     /**

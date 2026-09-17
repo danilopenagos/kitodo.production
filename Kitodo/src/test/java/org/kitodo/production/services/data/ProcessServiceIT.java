@@ -26,8 +26,12 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.SystemUtils;
 import org.junit.jupiter.api.AfterAll;
@@ -43,12 +47,17 @@ import org.kitodo.api.dataformat.Workpiece;
 import org.kitodo.api.dataformat.mets.LinkedMetsResource;
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
+import org.kitodo.data.database.beans.ImportConfiguration;
 import org.kitodo.data.database.beans.Process;
+import org.kitodo.data.database.beans.Role;
 import org.kitodo.data.database.beans.Task;
 import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.converter.ProcessConverter;
 import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.FileStructureValidationException;
+import org.kitodo.production.dto.ProcessExportDTO;
+import org.kitodo.production.enums.ProcessState;
 import org.kitodo.production.helper.metadata.legacytypeimplementations.LegacyMetsModsDigitalDocumentHelper;
 import org.kitodo.production.helper.metadata.legacytypeimplementations.LegacyPrefsHelper;
 import org.kitodo.production.metadata.MetadataLock;
@@ -56,6 +65,7 @@ import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.dataformat.MetsService;
 import org.kitodo.production.services.file.FileService;
 import org.kitodo.test.utils.ProcessTestUtils;
+import org.xml.sax.SAXException;
 
 /**
  * Tests for ProcessService class.
@@ -156,7 +166,7 @@ public class ProcessServiceIT {
     @Test
     public void shouldGetProcess() throws Exception {
         Process process = processService.getById(1);
-        boolean condition = process.getTitle().equals(firstProcess) && process.getWikiField().equals("field");
+        boolean condition = process.getTitle().equals(firstProcess);
         assertTrue(condition, "Process was not found in database!");
 
         assertEquals(5, process.getTasks().size(), "Process was found but tasks were not inserted!");
@@ -293,7 +303,7 @@ public class ProcessServiceIT {
     }
 
     @Test
-    public void shouldFindLinkableParentProcesses() throws DAOException, IOException {
+    public void shouldFindLinkableParentProcesses() throws Exception {
         assertEquals(1, processService.findLinkableParentProcesses(MockDatabase.HIERARCHY_PARENT, 1).size(), "Processes were not found in index!");
     }
 
@@ -494,7 +504,7 @@ public class ProcessServiceIT {
                 .getDigitalDocument();
 
         String processTitle = process.getTitle();
-        String processTitleFromMetadata = digitalDocument.getLogicalDocStruct().getAllMetadata().get(0).getValue();
+        String processTitleFromMetadata = digitalDocument.getLogicalDocStruct().getAllMetadata().getFirst().getValue();
         assertEquals(processTitle, processTitleFromMetadata, "It was not possible to read metadata file!");
 
         FileLoader.deleteMetadataFile();
@@ -601,7 +611,26 @@ public class ProcessServiceIT {
     }
 
     @Test
-    public void testCountMetadata() throws DAOException, IOException {
+    public void shouldDetectIncompleteChildren() throws Exception {
+        Integer parentId = testProcessIds.get(MockDatabase.HIERARCHY_PARENT);
+        Process parent = processService.getById(parentId);
+        assertNotNull(parent, "Parent in hierarchy not found!");
+
+        boolean hasIncomplete = processService.hasIncompleteChildren(parent);
+        assertTrue(hasIncomplete, "Parent should report incomplete children but did not!");
+
+        for (Process child : parent.getChildren()) {
+            child.setSortHelperStatus(ProcessState.COMPLETED.getValue());
+            processService.save(child);
+        }
+
+        boolean hasIncompleteAfterUpdate = processService.hasIncompleteChildren(parent);
+        assertFalse(hasIncompleteAfterUpdate,
+                "Parent should not report incomplete children after all children were completed!");
+    }
+
+    @Test
+    public void testCountMetadata() throws DAOException, IOException, SAXException, FileStructureValidationException {
         int testProcessId = MockDatabase.insertTestProcess(TEST_PROCESS_TITLE, 1, 1, 1);
         ProcessTestUtils.copyTestMetadataFile(testProcessId, TEST_METADATA_FILE);
         Process process = ServiceManager.getProcessService().getById(testProcessId);
@@ -632,5 +661,399 @@ public class ProcessServiceIT {
         assertEquals(1, process.getSortHelperImages());
         assertEquals(4, process.getSortHelperMetadata());
         assertEquals(1, process.getSortHelperDocstructs());
+    }
+
+    @Test
+    public void shouldReturnCorrectProcessExportDTO() throws Exception {
+
+        final String EXPECTED_EXPORT_TITLE = "Export Test Process";
+        final String EXPECTED_PROJECT_TITLE = "First project";
+
+        int testProcessId = MockDatabase.insertTestProcess(EXPECTED_EXPORT_TITLE, 1, 1, 1);
+        Process process = processService.getById(testProcessId);
+        List<ProcessExportDTO> result = processService.getProcessesForExport(
+                null,   // no filter
+                true,   // include closed
+                true,   // include inactive projects
+                process.getProject().getClient().getId(),
+                true,   // allSelected
+                List.of(), // selectedProcessIds
+                List.of()  // excludedProcessIds
+        );
+
+        ProcessExportDTO dto = result.stream()
+                .filter(d -> d.getId().equals(testProcessId))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Export DTO for test process not found"));
+
+        assertEquals(testProcessId, dto.getId(), "Process ID mismatch");
+        assertEquals(EXPECTED_EXPORT_TITLE, dto.getTitle(), "Title mismatch");
+        assertEquals(process.getCreationDate(), dto.getCreationDate(), "Creation date mismatch");
+        assertEquals(0, dto.getSortHelperImages(), "Image count mismatch");
+        assertEquals(0, dto.getSortHelperDocstructs(), "Docstruct count mismatch");
+        assertEquals(0, dto.getSortHelperMetadata(), "Metadata count mismatch");
+        assertEquals(EXPECTED_PROJECT_TITLE, dto.getProjectTitle(), "Project title mismatch");
+        assertEquals("", dto.getStatus(), "Status mismatch");
+
+        // cleanup
+        ProcessTestUtils.removeTestProcess(testProcessId);
+    }
+
+    @Test
+    public void shouldReturnCorrectProcessExportDTOWithCorrectStats() throws Exception {
+
+        final String EXPECTED_EXPORT_TITLE = "Export Test Process";
+        final String EXPECTED_PROJECT_TITLE = "First project";
+        final int SORT_HELPER_IMAGES = 100;
+        final int SORT_HELPER_DOCSTRUCTS = 200;
+        final int SORT_HELPER_METADATA = 300;
+        final String SORT_HELPER_STATUS = "060000010030";
+
+        int testProcessId = MockDatabase.insertTestProcess(EXPECTED_EXPORT_TITLE, 1, 1, 1);
+        Process process = processService.getById(testProcessId);
+        process.setSortHelperImages(SORT_HELPER_IMAGES);
+        process.setSortHelperMetadata(SORT_HELPER_METADATA);
+        process.setSortHelperDocstructs(SORT_HELPER_DOCSTRUCTS);
+        process.setSortHelperStatus(SORT_HELPER_STATUS);
+
+        processService.save(process);
+
+        List<ProcessExportDTO> result = processService.getProcessesForExport(
+                null,   // no filter
+                true,   // include closed
+                true,   // include inactive projects
+                process.getProject().getClient().getId(),
+                true,   // allSelected
+                List.of(), // selectedProcessIds
+                List.of()  // excludedProcessIds
+        );
+        ProcessExportDTO dto = result.stream()
+                .filter(d -> d.getId().equals(testProcessId))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Export DTO for test process not found"));
+
+        assertEquals(testProcessId, dto.getId(), "Process ID mismatch");
+        assertEquals(EXPECTED_EXPORT_TITLE, dto.getTitle(), "Title mismatch");
+        assertEquals(process.getCreationDate(), dto.getCreationDate(), "Creation date mismatch");
+        assertEquals(SORT_HELPER_IMAGES, dto.getSortHelperImages(), "Image count mismatch");
+        assertEquals(SORT_HELPER_DOCSTRUCTS, dto.getSortHelperDocstructs(), "Docstruct count mismatch");
+        assertEquals(SORT_HELPER_METADATA, dto.getSortHelperMetadata(), "Metadata count mismatch");
+        assertEquals(EXPECTED_PROJECT_TITLE, dto.getProjectTitle(), "Project title mismatch");
+        assertEquals(SORT_HELPER_STATUS, dto.getStatus(), "Status mismatch");
+
+        // cleanup
+        ProcessTestUtils.removeTestProcess(testProcessId);
+    }
+
+    @Test
+    public void shouldReturnOnlyExplicitlySelectedProcessesForExport() throws Exception {
+        int selectedProcessId1 = processService.getById(1).getId();
+        int selectedProcessId2 = processService.getById(2).getId();
+        int notSelectedProcessId = processService.getById(3).getId();
+
+        Process selectedProcess1 = processService.getById(selectedProcessId1);
+        int clientId = selectedProcess1.getProject().getClient().getId();
+
+        List<ProcessExportDTO> result = processService.getProcessesForExport(
+            null, // no filter
+            true, // include closed
+            true, // include inactive projects
+            clientId,
+            false, // allSelected
+            List.of(selectedProcessId1, selectedProcessId2), // selectedProcessIds
+            List.of() // excludedProcessIds
+        );
+
+        List<Integer> resultIds = result.stream()
+                .map(ProcessExportDTO::getId)
+                .toList();
+
+        assertEquals(List.of(selectedProcessId1, selectedProcessId2), resultIds,
+                "Export should contain exactly the explicitly selected processes in ID order");
+        assertFalse(resultIds.contains(notSelectedProcessId), "Unselected process should not be exported");
+    }
+
+    @Test
+    public void shouldReturnEmptyExportResultWhenNoProcessesAreSelected() throws Exception {
+        Process process = processService.getById(1);
+
+        List<ProcessExportDTO> result = processService.getProcessesForExport(
+            null, // no filter
+            true, // include closed
+            true, // include inactive projects
+            process.getProject().getClient().getId(),
+            false, // allSelected
+            List.of(), // selectedProcessIds
+            List.of() // excludedProcessIds
+        );
+
+        assertTrue(result.isEmpty(), "Export should be empty when no processes are selected");
+    }
+
+    @Test
+    public void shouldExcludeDeselectedProcessesWhenAllAreSelected() throws Exception {
+       int includedProcessId = MockDatabase.insertTestProcess("Included Export Process", 1, 1, 1);
+       int excludedProcessId = MockDatabase.insertTestProcess("Excluded Export Process", 1, 1, 1);
+
+       try {
+           Process includedProcess = processService.getById(includedProcessId);
+           int clientId = includedProcess.getProject().getClient().getId();
+
+           List<ProcessExportDTO> result = processService.getProcessesForExport(
+               null, // no filter
+               true, // include closed
+               true, // include inactive projects
+               clientId,
+               true, // allSelected
+               List.of(), // selectedProcessIds
+               List.of(excludedProcessId) // excludedProcessIds
+           );
+
+           List<Integer> resultIds = result.stream()
+                .map(ProcessExportDTO::getId)
+                .toList();
+
+           assertTrue(resultIds.contains(includedProcessId),
+               "Selected process should be exported");
+           assertFalse(resultIds.contains(excludedProcessId),
+               "Deselected process should not be exported");
+        } finally {
+           ProcessTestUtils.removeTestProcess(includedProcessId);
+           ProcessTestUtils.removeTestProcess(excludedProcessId);
+        }
+    }
+
+    @Test
+    public void shouldExcludeDeselectedProcessesFromFilteredExport() throws Exception {
+        int includedProcessId = MockDatabase.insertTestProcess("Included Export Process", 1, 1, 1);
+        int excludedProcessId = MockDatabase.insertTestProcess("Excluded Export Process", 1, 1, 1);
+
+        try {
+           ProcessTestUtils.copyTestMetadataFile(includedProcessId, TEST_METADATA_FILE);
+           ProcessTestUtils.copyTestMetadataFile(excludedProcessId, TEST_METADATA_FILE);
+
+           Process includedProcess = processService.getById(includedProcessId);
+           int clientId = includedProcess.getProject().getClient().getId();
+           User userOne = ServiceManager.getUserService().getById(1);
+           awaitProcessesInMetadataIndex(userOne, includedProcessId, excludedProcessId);
+
+            List<ProcessExportDTO> result = processService.getProcessesForExport(
+                "\"TSL_ATS:Proc\"",   // no filter
+                true, // include closed
+                true, // include inactive projects
+                clientId,
+                true, // allSelected
+                List.of(), // selectedProcessIds
+                List.of(excludedProcessId) // excludedProcessIds
+            );
+
+            List<Integer> resultIds = result.stream()
+                .map(ProcessExportDTO::getId)
+                .toList();
+
+            assertTrue(resultIds.contains(includedProcessId),
+                "Selected process should be exported");
+            assertFalse(resultIds.contains(excludedProcessId),
+                "Deselected process should not be exported");
+        } finally {
+            ProcessTestUtils.removeTestProcess(includedProcessId);
+            ProcessTestUtils.removeTestProcess(excludedProcessId);
+        }
+    }
+
+    @Test
+    public void shouldExcludeDeselectedProcessesFromSelection() throws Exception {
+        int includedProcessId = MockDatabase.insertTestProcess("Included Selection Process", 1, 1, 1);
+        int excludedProcessId = MockDatabase.insertTestProcess("Excluded Selection Process", 1, 1, 1);
+
+        try {
+
+            List<Process> result = processService.findSelectedProcesses(
+                true, // showClosedProcesses
+                true, // showInactiveProjects
+                null, //filter
+                List.of(excludedProcessId) // excludedProcessIds
+            );
+
+            List<Integer> resultIds = result.stream()
+                .map(Process::getId)
+                .toList();
+
+            assertTrue(resultIds.contains(includedProcessId),
+                "Selected process should be returned");
+            assertFalse(resultIds.contains(excludedProcessId),
+                "Deselected process should not be returned");
+        } finally {
+            ProcessTestUtils.removeTestProcess(includedProcessId);
+            ProcessTestUtils.removeTestProcess(excludedProcessId);
+        }
+    }
+
+    @Test
+    public void shouldExcludeDeselectedProcessesFromFilteredSelection() throws Exception {
+        int includedProcessId = MockDatabase.insertTestProcess("Included Selection Process", 1, 1, 1);
+        int excludedProcessId = MockDatabase.insertTestProcess("Excluded Selection Process", 1, 1, 1);
+
+        try {
+            ProcessTestUtils.copyTestMetadataFile(includedProcessId, TEST_METADATA_FILE);
+            ProcessTestUtils.copyTestMetadataFile(excludedProcessId, TEST_METADATA_FILE);
+
+            User userOne = ServiceManager.getUserService().getById(1);
+            awaitProcessesInMetadataIndex(userOne, includedProcessId, excludedProcessId);
+            List<Process> result = processService.findSelectedProcesses(
+                true, // showClosedProcesses
+                true, // showInactiveProjects
+                "\"TSL_ATS:Proc\"", //filter
+                List.of(excludedProcessId)  // excludedProcessIds
+            );
+            List<Integer> resultIds = result.stream()
+                .map(Process::getId)
+                .toList();
+
+            assertTrue(resultIds.contains(includedProcessId),
+                "Process matching the filter should be selected");
+            assertFalse(resultIds.contains(excludedProcessId),
+                "Deselected process matching the filter should not be selected");
+        } finally {
+            ProcessTestUtils.removeTestProcess(includedProcessId);
+            ProcessTestUtils.removeTestProcess(excludedProcessId);
+        }
+    }
+
+    private void awaitProcessesInMetadataIndex(User user, int... processIds) {
+        await()
+            .alias("test processes to be available in the search index")
+            .until(() -> {
+                SecurityTestUtils.addUserDataToSecurityContext(user, 1);
+
+                List<Integer> indexedIds = processService.findByMetadata(
+                        Collections.singletonMap("TSL_ATS", "Proc"))
+                    .stream()
+                    .map(Process::getId)
+                    .toList();
+
+                return Arrays.stream(processIds)
+                    .allMatch(indexedIds::contains);
+            });
+    }
+
+    @Test
+    public void shouldFindProcessIdsWithChildren() throws Exception {
+        ProcessService processService = ServiceManager.getProcessService();
+        List<Process> processes = processService.getAll();
+        List<Integer> allIds = processes.stream()
+                .map(Process::getId)
+                .collect(Collectors.toList());
+        Set<Integer> expected = processes.stream()
+                .filter(p -> Objects.nonNull(p.getChildren()) && !p.getChildren().isEmpty())
+                .map(Process::getId)
+                .collect(Collectors.toSet());
+        Set<Integer> actual = processService.findProcessIdsWithChildren(allIds);
+
+        assertEquals(expected.size(), actual.size(), "Unexpected number of parent processes");
+        assertTrue(actual.containsAll(expected), "Returned parent process IDs do not match expected");
+    }
+
+    @Test
+    public void shouldFindProcessIdsWithVisibleTasksForUserOne() throws Exception {
+        ProcessService processService = ServiceManager.getProcessService();
+        UserService userService = ServiceManager.getUserService();
+
+        User user = userService.getById(1);
+        Set<Integer> userRoleIds = user.getRoles().stream()
+                .map(Role::getId)
+                .collect(Collectors.toSet());
+
+        List<Process> processes = processService.getAll();
+        List<Integer> processIds = processes.stream()
+                .map(Process::getId)
+                .collect(Collectors.toList());
+
+        Set<Integer> expected = new HashSet<>();
+
+        for (Process process : processes) {
+            if (hasVisibleTaskForUser(process, userRoleIds)) {
+                expected.add(process.getId());
+            }
+        }
+        Set<Integer> actual = processService.findProcessIdsWithVisibleTasks(
+                processIds,
+                userRoleIds
+        );
+
+        assertEquals(expected, actual, "Visible process IDs for user 1 do not match");
+    }
+
+    private boolean hasVisibleTaskForUser(Process process, Set<Integer> userRoles) {
+        if (Objects.isNull(process.getTasks())) {
+            return false;
+        }
+        for (Task task : process.getTasks()) {
+            if (!(TaskStatus.OPEN.equals(task.getProcessingStatus())
+                    || TaskStatus.INWORK.equals(task.getProcessingStatus()))) {
+                continue;
+            }
+            for (Integer roleId : task.getRoleIds()) {
+                if (userRoles.contains(roleId)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void shouldSetImportConfigurationForMultipleProcesses() throws Exception {
+        ImportConfiguration testConfiguration = new ImportConfiguration();
+        testConfiguration.setTitle("Bulk update test configuration");
+        ServiceManager.getImportConfigurationService().save(testConfiguration);
+
+        Process firstProcess = processService.getById(1);
+        Process secondProcess = processService.getById(2);
+        Process unselectedProcess = processService.getById(3);
+
+        ImportConfiguration firstOriginalConfiguration = firstProcess.getImportConfiguration();
+        ImportConfiguration secondOriginalConfiguration = secondProcess.getImportConfiguration();
+        Integer unselectedOriginalConfigurationId = Objects.isNull(unselectedProcess.getImportConfiguration())
+            ? null
+            : unselectedProcess.getImportConfiguration().getId();
+
+        try {
+            String configurationTitle =
+                processService.setImportConfigurationForMultipleProcesses(
+                    List.of(firstProcess, secondProcess),
+                    testConfiguration.getId());
+
+            firstProcess = processService.getById(1);
+            secondProcess = processService.getById(2);
+            unselectedProcess = processService.getById(3);
+
+            assertEquals(
+                testConfiguration.getTitle(),
+                configurationTitle,
+                "Wrong import configuration title was returned!");
+            assertEquals(
+                testConfiguration.getId(),
+                firstProcess.getImportConfiguration().getId(),
+                "Import configuration was not assigned to the first process!");
+            assertEquals(
+                testConfiguration.getId(),
+                secondProcess.getImportConfiguration().getId(),
+                "Import configuration was not assigned to the second process!");
+            Integer unselectedConfigurationId = Objects.isNull(unselectedProcess.getImportConfiguration())
+                ? null
+                : unselectedProcess.getImportConfiguration().getId();
+            assertEquals(
+                unselectedOriginalConfigurationId,
+                unselectedConfigurationId,
+                "Import configuration of an unselected process was changed!");
+        } finally {
+            firstProcess.setImportConfiguration(firstOriginalConfiguration);
+            secondProcess.setImportConfiguration(secondOriginalConfiguration);
+            processService.save(firstProcess);
+            processService.save(secondProcess);
+
+            ServiceManager.getImportConfigurationService().remove(testConfiguration);
+        }
     }
 }

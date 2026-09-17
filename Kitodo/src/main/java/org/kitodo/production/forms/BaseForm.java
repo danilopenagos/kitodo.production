@@ -21,23 +21,20 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
-import javax.faces.model.SelectItem;
+import jakarta.faces.model.SelectItem;
 
-import org.kitodo.data.database.beans.Client;
 import org.kitodo.data.database.beans.ListColumn;
-import org.kitodo.data.database.beans.Project;
-import org.kitodo.data.database.beans.Role;
 import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.production.enums.ObjectType;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.model.LazyBeanModel;
 import org.kitodo.production.services.ServiceManager;
-import org.kitodo.production.services.data.ClientService;
-import org.kitodo.production.services.data.RoleService;
+import org.primefaces.PrimeFaces;
 import org.primefaces.component.datatable.DataTable;
 import org.primefaces.event.TabChangeEvent;
 import org.primefaces.event.data.PageEvent;
+import org.primefaces.model.SortMeta;
 
 public class BaseForm implements Serializable {
 
@@ -45,7 +42,7 @@ public class BaseForm implements Serializable {
     protected String filter = "";
     protected User user;
     protected LazyBeanModel lazyBeanModel = null;
-    private static final String REDIRECT_PARAMETER = "faces-redirect=true";
+    protected static final String REDIRECT_PARAMETER = "faces-redirect=true";
     private static final String TEMPLATE_ROOT = "/pages/";
     private int activeTabIndex = 0;
     private int editActiveTabIndex = 0;
@@ -68,7 +65,7 @@ public class BaseForm implements Serializable {
     protected static final String EXPORT_FINISHED = "exportFinished";
 
     protected static final String REDIRECT_PATH = TEMPLATE_ROOT + "{0}?" + REDIRECT_PARAMETER;
-    protected static final String DEFAULT_LINK = "desktop.jsf";
+    protected static final String DEFAULT_LINK = "desktop";
     private static final String LIST_PAGE = TEMPLATE_ROOT + "{0}?keepPagination=true&" + REDIRECT_PARAMETER;
     protected final String usersPage = MessageFormat.format(LIST_PAGE, "users");
     protected final String processesPage = "processes?" + REDIRECT_PARAMETER;
@@ -81,6 +78,7 @@ public class BaseForm implements Serializable {
     protected List<ListColumn> selectedColumns;
 
     protected int firstRow;
+    protected SortMeta sortBy;
 
     /**
      * Get first row to show in datatable.
@@ -99,11 +97,45 @@ public class BaseForm implements Serializable {
     }
 
     /**
-     * Update first row to show in datatable on PageEvent.
+     * Set first row from the view parameter (query parameter), which might be unavailable or an arbitrary value.
+     */
+    public void setFirstRowFromTemplate(String firstRow) {
+        if (Objects.nonNull(firstRow) && !firstRow.isEmpty()) {
+            try {
+                this.firstRow = Integer.parseInt(firstRow);
+            } catch (NumberFormatException e) {
+                this.firstRow = 0;
+            }
+        }
+    }
+
+    /**
+     * Event listener in case a user navigates to a different page in the list view.
+     * 
      * @param pageEvent PageEvent triggered by data tables paginator
      */
     public void onPageChange(PageEvent pageEvent) {
-        this.setFirstRow(((DataTable) pageEvent.getSource()).getFirst());
+        DataTable source = (DataTable) pageEvent.getSource();
+        String script = "kitodo.updateQueryParameter('firstRow', '" + source.getRows() * pageEvent.getPage() + "');";
+        PrimeFaces.current().executeScript(script);
+    }
+
+    /**
+     * Get the current sorting configuration.
+     *
+     * @return the SortMeta object representing the sorting configuration
+     */
+    public SortMeta getSortBy() {
+        return sortBy;
+    }
+
+    /**
+     * Set the sorting configuration.
+     *
+     * @param sortBy the SortMeta object representing the sorting configuration
+     */
+    public void setSortBy(SortMeta sortBy) {
+        this.sortBy = sortBy;
     }
 
     /**
@@ -152,7 +184,14 @@ public class BaseForm implements Serializable {
      */
     public User getUser() {
         if (Objects.isNull(this.user)) {
-            this.user = ServiceManager.getUserService().getCurrentUser();
+            try {
+                User authenticatedUser = ServiceManager.getUserService().getCurrentUser();
+                // reload user from database, since authenticated user object might contain outdated data,
+                // e.g. outdated filters
+                this.user = ServiceManager.getUserService().getById(authenticatedUser.getId());
+            } catch (DAOException e) {
+                Helper.setErrorMessage(ERROR_LOADING_ONE, ObjectType.USER.getTranslationSingular(), getUser().getId());
+            }
         }
         return this.user;
     }
@@ -372,41 +411,6 @@ public class BaseForm implements Serializable {
             return dateFormat.format(date);
         }
         return "";
-    }
-
-    /**
-     * Create and return String containing the titles of all given roles joined by a ", ".
-     *
-     * @param roles list of roles
-     * @return String containing role titles
-     */
-    public String getRoleTitles(List<Role> roles) {
-        return RoleService.getRoleTitles(roles);
-    }
-
-    /**
-     * Create and return String containing the names of all given clients joined by a ", ".
-     *
-     * @param clients list of roles
-     * @return String containing client names
-     */
-    public String getClientNames(List<Client> clients) {
-        return ClientService.getClientNames(clients);
-    }
-
-    /**
-     * Create and return String containing the titles of all given projects joined by a ", ".
-     *
-     * @param projects list of roles
-     * @return String containing project titles
-     */
-    public String getProjectTitles(List<Project> projects) {
-        try {
-            return ServiceManager.getProjectService().getProjectTitles(projects);
-        } catch (DAOException e) {
-            Helper.setErrorMessage(e);
-            return "";
-        }
     }
 
     /**

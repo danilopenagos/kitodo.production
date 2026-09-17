@@ -34,11 +34,9 @@ import java.util.ListIterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.faces.model.SelectItem;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.transform.TransformerException;
@@ -46,6 +44,8 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
+
+import jakarta.faces.model.SelectItem;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -64,6 +64,7 @@ import org.kitodo.api.externaldatamanagement.ExternalDataImportInterface;
 import org.kitodo.api.externaldatamanagement.ImportConfigurationType;
 import org.kitodo.api.externaldatamanagement.SearchInterfaceType;
 import org.kitodo.api.externaldatamanagement.SearchResult;
+import org.kitodo.api.externaldatamanagement.XmlResponseHandler;
 import org.kitodo.api.schemaconverter.DataRecord;
 import org.kitodo.api.schemaconverter.ExemplarRecord;
 import org.kitodo.api.schemaconverter.FileFormat;
@@ -89,6 +90,7 @@ import org.kitodo.exceptions.CatalogException;
 import org.kitodo.exceptions.CommandException;
 import org.kitodo.exceptions.ConfigException;
 import org.kitodo.exceptions.DoctypeMissingException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.ImportException;
 import org.kitodo.exceptions.InvalidMetadataValueException;
 import org.kitodo.exceptions.NoRecordFoundException;
@@ -113,6 +115,7 @@ import org.kitodo.production.process.ProcessGenerator;
 import org.kitodo.production.process.ProcessValidator;
 import org.kitodo.production.process.TitleGenerator;
 import org.kitodo.production.services.ServiceManager;
+import org.kitodo.production.services.validation.FileStructureValidationService;
 import org.kitodo.production.workflow.KitodoNamespaceContext;
 import org.kitodo.serviceloader.KitodoServiceLoader;
 import org.w3c.dom.Document;
@@ -261,7 +264,7 @@ public class ImportService {
         } else if (Objects.nonNull(importConfiguration.getDefaultSearchField())) {
             return importConfiguration.getDefaultSearchField().getLabel();
         } else if (!importConfiguration.getSearchFields().isEmpty()) {
-            return importConfiguration.getSearchFields().get(0).getLabel();
+            return importConfiguration.getSearchFields().getFirst().getLabel();
         }
         return "";
     }
@@ -354,12 +357,12 @@ public class ImportService {
         List<SchemaConverterInterface> converterModules = loader.loadModules().stream()
                 .filter(converter -> converter.supportsSourceFileFormat(record.getFileFormat())
                         && converter.supportsTargetFileFormat(FileFormat.XML))
-                .collect(Collectors.toList());
+                .toList();
         if (converterModules.isEmpty()) {
             throw new UnsupportedFormatException("No SchemaConverter found that supports '"
                     + record.getMetadataFormat() + "' and '" + record.getFileFormat() + "'!");
         }
-        return converterModules.get(0);
+        return converterModules.getFirst();
     }
 
     /**
@@ -369,15 +372,12 @@ public class ImportService {
      * @return docType as String
      */
     private String getRecordDocType(Document record, Ruleset ruleset) throws IOException {
-        Collection<String> doctypes = getDocTypeMetadata(ruleset);
-        Element root = record.getDocumentElement();
-        NodeList kitodoNodes = root.getElementsByTagNameNS(KITODO_NAMESPACE, KITODO);
-        if (kitodoNodes.getLength() > 0 && !doctypes.isEmpty() && kitodoNodes.item(0) instanceof Element) {
-            Element kitodoElement = (Element) kitodoNodes.item(0);
-            NodeList importedMetadata = kitodoElement.getElementsByTagNameNS(KITODO_NAMESPACE, "metadata");
+        Collection<String> doctypes = RulesetService.getDocTypeMetadata(ruleset);
+        if (!doctypes.isEmpty()) {
+            Element root = record.getDocumentElement();
+            NodeList importedMetadata = root.getElementsByTagNameNS(KITODO_NAMESPACE, "metadata");
             for (int i = 0; i < importedMetadata.getLength(); i++) {
-                Node metadataNode = importedMetadata.item(i);
-                Element metadataElement = (Element) metadataNode;
+                Element metadataElement = (Element) importedMetadata.item(i);
                 if (doctypes.contains(metadataElement.getAttribute("name"))) {
                     return metadataElement.getTextContent();
                 }
@@ -452,13 +452,15 @@ public class ImportService {
 
     private String importProcessAndReturnParentID(String recordId, LinkedList<TempProcess> allProcesses,
                                                   ImportConfiguration importConfiguration, int projectID,
-                                                  int templateID, boolean isParentInRecord, String parentIdMetadata)
+                                                  int templateID, boolean isParentInRecord, String parentIdMetadata,
+                                                  boolean validateAgainstXmlSchema)
             throws IOException, ProcessGenerationException, XPathExpressionException, ParserConfigurationException,
             NoRecordFoundException, UnsupportedFormatException, URISyntaxException, SAXException, TransformerException,
-            InvalidMetadataValueException, NoSuchMetadataFieldException {
+            FileStructureValidationException {
 
         DataRecord dataRecord = importExternalDataRecord(importConfiguration, recordId, allProcesses.isEmpty());
-        Document internalDocument = convertDataRecordToInternal(dataRecord, importConfiguration, isParentInRecord);
+        Document internalDocument = convertDataRecordToInternal(dataRecord, importConfiguration, isParentInRecord,
+                validateAgainstXmlSchema, recordId);
         TempProcess tempProcess = createTempProcessFromDocument(importConfiguration, internalDocument, templateID, projectID);
 
         // Workaround for classifying MultiVolumeWorks with insufficient information
@@ -489,6 +491,7 @@ public class ImportService {
      * @param recordId catalog identifier of data record to import
      * @param templateID ID of template to use when importing data record to TempProcess
      * @param projectID ID of project to which imported data record is assigned
+     * @param validateAgainstXmlSchema whether to validate imported XML against XML Schema
      * @return TempProcess containing imported data record
      * @throws UnsupportedFormatException when external data record contains data in unsupported format
      * @throws NoRecordFoundException when no record with given ID 'recordId' could be found
@@ -501,12 +504,12 @@ public class ImportService {
      * @throws TransformerException when loading internal format document fails
      */
     public TempProcess importTempProcess(ImportConfiguration importConfiguration, String recordId, int templateID,
-                                         int projectID)
+                                         int projectID, boolean validateAgainstXmlSchema)
             throws UnsupportedFormatException, NoRecordFoundException, XPathExpressionException,
             ProcessGenerationException, URISyntaxException, IOException, ParserConfigurationException, SAXException,
-            TransformerException {
+            TransformerException, FileStructureValidationException {
         DataRecord dataRecord = importExternalDataRecord(importConfiguration, recordId, false);
-        Document internalDocument = convertDataRecordToInternal(dataRecord, importConfiguration, false);
+        Document internalDocument = convertDataRecordToInternal(dataRecord, importConfiguration, false, validateAgainstXmlSchema, recordId);
         return createTempProcessFromDocument(importConfiguration, internalDocument, templateID, projectID);
     }
 
@@ -531,20 +534,51 @@ public class ImportService {
      * from the OPAC selected in the given CreateProcessForm instance.
      * Return the list of processes as a LinkedList of TempProcess.
      *
-     * @param recordId identifier of the process to import
-     * @param importConfiguration ImportConfiguration used to import the record
-     * @param projectId the ID of the project for which a process is created
-     * @param templateId the ID of the template from which a process is created
-     * @param importDepth the number of hierarchical processes that will be imported from the catalog
-     * @param parentIdMetadata names of Metadata types holding parent IDs of structure elements in internal format
-     * @return List of TempProcess
+     * @param recordId
+     *          identifier of the process to import
+     * @param importConfiguration
+     *          ImportConfiguration used to import the record
+     * @param projectId
+     *          the ID of the project for which a process is created
+     * @param templateId
+     *          the ID of the template from which a process is created
+     * @param importDepth
+     *          the number of hierarchical processes that will be imported from the catalog
+     * @param parentIdMetadata
+     *          names of Metadata types holding parent IDs of structure elements in internal format
+     * @return
+     *          List of TempProcess
+     * @throws IOException
+     *          when importing data record or generating atstsl fields fails
+     * @throws ProcessGenerationException
+     *          when process cannot be created because ruleset is null or metadata import failed
+     * @throws XPathExpressionException
+     *          when XPath expression for retrieving parent ID is invalid
+     * @throws ParserConfigurationException
+     *          when parsing import XML document fails
+     * @throws NoRecordFoundException
+     *          when no data record with given ID could be found
+     * @throws UnsupportedFormatException
+     *          when external data record contains data in unsupported format
+     * @throws URISyntaxException
+     *          when loading MappingFiles from ImportConfiguration fails
+     * @throws SAXException
+     *          when parsing import XML document fails
+     * @throws TransformerException
+     *          when loading document in internal format fails
+     * @throws InvalidMetadataValueException
+     *          when generating atstsl fields fails
+     * @throws NoSuchMetadataFieldException
+     *          when generating atstsl fields fails
+     * @throws FileStructureValidationException
+     *          when XML validation of imported data record fails
      */
     public LinkedList<TempProcess> importProcessHierarchy(String recordId, ImportConfiguration importConfiguration,
                                                           int projectId, int templateId, int importDepth,
-                                                          Collection<String> parentIdMetadata)
+                                                          Collection<String> parentIdMetadata, boolean validateAgainstXmlSchema)
             throws IOException, ProcessGenerationException, XPathExpressionException, ParserConfigurationException,
             NoRecordFoundException, UnsupportedFormatException, URISyntaxException, SAXException, DAOException,
-            TransformerException, InvalidMetadataValueException, NoSuchMetadataFieldException {
+            TransformerException, InvalidMetadataValueException, NoSuchMetadataFieldException, FileStructureValidationException {
         importModule = initializeImportModule();
         processGenerator = new ProcessGenerator();
         LinkedList<TempProcess> processes = new LinkedList<>();
@@ -559,7 +593,7 @@ public class ImportService {
         }
 
         String parentID = importProcessAndReturnParentID(recordId, processes, importConfiguration, projectId,
-                templateId, false, parentMetadataKey);
+                templateId, false, parentMetadataKey, validateAgainstXmlSchema);
         Template template = ServiceManager.getTemplateService().getById(templateId);
         if (Objects.isNull(template.getRuleset())) {
             throw new ProcessGenerationException("Ruleset of template " + template.getId() + " is null!");
@@ -585,7 +619,7 @@ public class ImportService {
                                String parentIdMetadata)
             throws ProcessGenerationException, IOException, XPathExpressionException, ParserConfigurationException,
             NoRecordFoundException, UnsupportedFormatException, URISyntaxException, SAXException,
-            InvalidMetadataValueException, NoSuchMetadataFieldException {
+            FileStructureValidationException {
         int level = 1;
         this.parentTempProcess = null;
         while (Objects.nonNull(parentID) && level < importDepth) {
@@ -594,10 +628,10 @@ public class ImportService {
                 if (Objects.isNull(parentProcess)) {
                     if (Objects.nonNull(importConfiguration.getParentMappingFile())) {
                         parentID = importProcessAndReturnParentID(recordId, processes, importConfiguration, projectId,
-                                templateId, true, parentIdMetadata);
+                                templateId, true, parentIdMetadata, false);
                     } else {
                         parentID = importProcessAndReturnParentID(parentID, processes, importConfiguration, projectId,
-                                templateId, false, parentIdMetadata);
+                                templateId, false, parentIdMetadata, false);
                     }
                     level++;
                 } else {
@@ -664,9 +698,10 @@ public class ImportService {
             URI workpieceUri = ServiceManager.getProcessService().getMetadataFileUri(parentProcess);
             Workpiece parentWorkpiece = ServiceManager.getMetsService().loadWorkpiece(workpieceUri);
             return new TempProcess(parentProcess, parentWorkpiece);
-        } catch (ProcessGenerationException | DAOException | IOException e) {
-            logger.error("Error retrieving parent process with 'recordIdentifier' {}, project ID {} and ruleset {}",
-                    parentRecordId, projectID, ruleset.getTitle());
+        } catch (ProcessGenerationException | DAOException | IOException | SAXException
+                 | FileStructureValidationException e) {
+            logger.error("Error retrieving parent process with 'recordIdentifier' {}, project ID {} and ruleset {}: {}",
+                    parentRecordId, projectID, ruleset.getTitle(), e.getMessage());
             return null;
         }
     }
@@ -724,7 +759,7 @@ public class ImportService {
         List<DataRecord> childRecords = searchChildRecords(importConfiguration, elementID, rows);
         LinkedList<TempProcess> childProcesses = new LinkedList<>();
         if (!childRecords.isEmpty()) {
-            SchemaConverterInterface converter = getSchemaConverter(childRecords.get(0));
+            SchemaConverterInterface converter = getSchemaConverter(childRecords.getFirst());
             List<File> mappingFiles = getMappingFiles(importConfiguration);
             for (DataRecord childRecord : childRecords) {
                 DataRecord internalRecord = converter.convert(childRecord, MetadataFormat.KITODO, FileFormat.XML, mappingFiles);
@@ -762,9 +797,12 @@ public class ImportService {
             throws NoRecordFoundException, IOException,
             XPathExpressionException, ParserConfigurationException, SAXException {
         importModule = initializeImportModule();
-        DataRecord dataRecord = importModule.getFullRecordById(
-                createDataImportFromImportConfiguration(importConfiguration),
+        DataImport dataImport = createDataImportFromImportConfiguration(importConfiguration);
+        DataRecord dataRecord = importModule.getFullRecordById(dataImport,
                 getSearchTermWithDelimiter(identifier, importConfiguration));
+        String xmlContent = (String)dataRecord.getOriginalData();
+        XMLUtils.checkIfXmlIsWellFormed(xmlContent);
+        XmlResponseHandler.checkRecordFound(dataImport.getSearchInterfaceType(), xmlContent, identifier);
         if (extractExemplars) {
             exemplarRecords = extractExemplarRecords(dataRecord, importConfiguration);
         }
@@ -778,14 +816,36 @@ public class ImportService {
      *
      * @param importedEADRecord XML string representation of
      * @return list of temp processes
+     * @throws IOException
+     *          when loading XML string if given imported EAD record fails
+     * @throws ParserConfigurationException
+     *          when parsing XML string if given imported EAD record fails
+     * @throws SAXException
+     *          when parsing XML string if given imported EAD record fails
+     * @throws ProcessGenerationException
+     *          when there is not exactly one parent element
+     * @throws TransformerException
+     *          when parsing external data record fails
+     * @throws UnsupportedFormatException
+     *          when external data record contains data in unsupported format
+     * @throws XPathExpressionException
+     *          when error message XPath in import configuration has syntax errors
+     * @throws URISyntaxException
+     *          when loading MappingFiles from ImportConfiguration fails during conversion of external data record
+     * @throws InvalidMetadataValueException
+     *          when generating atstsl fields fails
+     * @throws NoSuchMetadataFieldException
+     *          when generating atstsl fields fails
+     * @throws FileStructureValidationException
+     *          when XML validation of imported data record fails
      */
     public LinkedList<TempProcess> parseImportedEADCollection(DataRecord importedEADRecord,
                                                               ImportConfiguration importConfiguration, int projectId,
                                                               int templateId, String eadChildProcessLevel,
-                                                              String eadParentProcessLevel)
+                                                              String eadParentProcessLevel, boolean validate)
             throws IOException, ParserConfigurationException, SAXException, ProcessGenerationException,
             TransformerException, UnsupportedFormatException, XPathExpressionException, URISyntaxException,
-            InvalidMetadataValueException, NoSuchMetadataFieldException {
+            InvalidMetadataValueException, NoSuchMetadataFieldException, FileStructureValidationException {
         LinkedList<TempProcess> eadCollectionProcesses = new LinkedList<>();
 
         Document eadCollectionDocument = XMLUtils.parseXMLString((String) importedEADRecord.getOriginalData());
@@ -799,14 +859,14 @@ public class ImportService {
         }
 
         // create temp processes for parent (e.g. "collection") and children (e.g. "files")
-        TempProcess collectionProcess = createTempProcessFromElement(parentElements.get(0), importConfiguration,
-                projectId, templateId, true);
+        TempProcess collectionProcess = createTempProcessFromElement(parentElements.getFirst(), importConfiguration,
+                projectId, templateId, true, validate);
         eadCollectionProcesses.add(collectionProcess);
 
         List<TempProcess> parentProcesses = Collections.singletonList(collectionProcess);
         for (Element fileElement : childElements) {
             TempProcess currentFileProcess = createTempProcessFromElement(fileElement, importConfiguration,
-                    projectId, templateId, false);
+                    projectId, templateId, false, validate);
             ProcessHelper.generateAtstslFields(currentFileProcess, parentProcesses, CREATE, false);
             eadCollectionProcesses.add(currentFileProcess);
         }
@@ -832,16 +892,19 @@ public class ImportService {
      * @throws IOException when creating new process failed
      * @throws ParserConfigurationException when external data could not be transformed to internal metadata format
      * @throws SAXException when external data could not be transformed to internal metadata format
+     * @throws FileStructureValidationException when XML validation external data record, internal data record or mapping
+     *                  files used for transformation fails
      */
     public TempProcess createTempProcessFromElement(Element element, ImportConfiguration importConfiguration,
-                                                           int projectId, int templateId, boolean isParent)
+                                                           int projectId, int templateId, boolean isParent, boolean validate)
             throws TransformerException, UnsupportedFormatException, XPathExpressionException,
-            ProcessGenerationException, URISyntaxException, IOException, ParserConfigurationException, SAXException {
+            ProcessGenerationException, URISyntaxException, IOException, ParserConfigurationException, SAXException,
+            FileStructureValidationException {
         String collectionString = XMLUtils.elementToString(element);
         DataRecord externalCollectionRecord = XMLUtils.createRecordFromXMLElement(collectionString,
                 importConfiguration);
         Document internalEadCollectionDocument = convertDataRecordToInternal(externalCollectionRecord,
-                importConfiguration, isParent);
+                importConfiguration, isParent, validate, "N/A");
         return createTempProcessFromDocument(importConfiguration, internalEadCollectionDocument, templateId, projectId);
     }
 
@@ -870,21 +933,48 @@ public class ImportService {
      * @param importConfiguration the import configuration to use
      * @param isParentInRecord if parentRecord is in childRecord
      * @return the converted Document
+     * @throws UnsupportedFormatException
+     *          when data is in unsupported format
+     * @throws URISyntaxException
+     *          when loading MappingFiles from ImportConfiguration fails
+     * @throws IOException
+     *          when error occurs during XML validation of mapping files, external record or internal record or if debug
+     *          files could not be written
+     * @throws ParserConfigurationException
+     *          internal record contains XML syntax errors after conversion of external data record
+     * @throws SAXException
+     *          when error occurs during XML validation of mapping files, external record or internal record
+     * @throws XPathExpressionException
+     *          when error message XPath in import configuration has syntax errors
+     * @throws ProcessGenerationException
+     *          when result document created from internal data record is null
+     * @throws FileStructureValidationException
+     *          when XML validation of imported data record fails
      */
     public Document convertDataRecordToInternal(DataRecord dataRecord, ImportConfiguration importConfiguration,
-                                                boolean isParentInRecord)
+                                                boolean isParentInRecord, boolean validateExternal, String identifier)
             throws UnsupportedFormatException, URISyntaxException, IOException, ParserConfigurationException,
-            SAXException, XPathExpressionException, ProcessGenerationException {
-        SchemaConverterInterface converter = getSchemaConverter(dataRecord);
+            SAXException, XPathExpressionException, ProcessGenerationException, FileStructureValidationException {
 
-        List<File> mappingFiles = getMappingFiles(importConfiguration, isParentInRecord);
+        FileStructureValidationService validationService = ServiceManager.getFileStructureValidationService();
 
-        // transform dataRecord to Kitodo internal format using appropriate SchemaConverter!
+        // validate mapping files against xslt schema
+        validationService.validateMappingFiles(importConfiguration.getMappingFiles());
+
+        String xmlContent = (String) dataRecord.getOriginalData();
         File debugFolder = ConfigCore.getKitodoDebugDirectory();
         if (Objects.nonNull(debugFolder)) {
-            FileUtils.writeStringToFile(new File(debugFolder, "catalogRecord.xml"),
-                    (String) dataRecord.getOriginalData(), StandardCharsets.UTF_8);
+            FileUtils.writeStringToFile(new File(debugFolder, "catalogRecord.xml"), xmlContent, StandardCharsets.UTF_8);
         }
+
+        // validate external record against corresponding XML metadata schema(ta)
+        if (validateExternal && importConfiguration.getValidateExternalData()) {
+            validationService.validateExternalRecord(xmlContent, importConfiguration, identifier);
+        }
+
+        // transform dataRecord to Kitodo internal format using appropriate SchemaConverter!
+        List<File> mappingFiles = getMappingFiles(importConfiguration, isParentInRecord);
+        SchemaConverterInterface converter = getSchemaConverter(dataRecord);
         DataRecord internalRecord = converter.convert(dataRecord, MetadataFormat.KITODO, FileFormat.XML, mappingFiles);
         if (Objects.nonNull(debugFolder)) {
             FileUtils.writeStringToFile(new File(debugFolder, "internalRecord.xml"),
@@ -896,30 +986,39 @@ public class ImportService {
                     + internalRecord.getOriginalData().getClass().getName() + "' found!");
         }
 
+        // validate transformed record against Kitodo and potentially METS schemata
+        validationService.validateInternalRecord((String)internalRecord.getOriginalData(),
+                importConfiguration.getPrestructuredImport(), mappingFiles.stream().map(File::getName)
+                        .collect(Collectors.joining(", ")));
+
         Document resultDocument = null;
         try {
             resultDocument = XMLUtils.parseXMLString((String) internalRecord.getOriginalData());
         } catch (SAXParseException e) {
-            String interfaceName = importConfiguration.getInterfaceType();
-            if (Arrays.stream(SearchInterfaceType.values()).anyMatch(sit -> sit.name().equals(interfaceName))) {
-                SearchInterfaceType searchInterfaceType = SearchInterfaceType.valueOf(interfaceName);
-                String errorMessageXpath = searchInterfaceType.getErrorMessageXpath();
-                if (Objects.nonNull(errorMessageXpath) && dataRecord.getOriginalData() instanceof String) {
-                    Element originalDocument = XMLUtils.parseXMLString((String) dataRecord.getOriginalData()).getDocumentElement();
-                    String errorMessage = XPathFactory.newInstance().newXPath().evaluate(errorMessageXpath, originalDocument);
-                    if (StringUtils.isNotBlank(errorMessage)) {
-                        errorMessage = interfaceName.toUpperCase() + " error: '" + errorMessage + "'";
-                        throw new CatalogException(errorMessage);
-                    }
-                }
-            } else {
-                throw e;
-            }
+            handleSaxParseException(dataRecord, importConfiguration.getInterfaceType(), e);
         }
         if (Objects.isNull(resultDocument)) {
             throw new ProcessGenerationException(Helper.getTranslation("importError.emptyDocument"));
         }
         return resultDocument;
+    }
+
+    private void handleSaxParseException(DataRecord dataRecord, String interfaceType, SAXParseException e) throws SAXException,
+            IOException, ParserConfigurationException, XPathExpressionException {
+        if (Arrays.stream(SearchInterfaceType.values()).anyMatch(sit -> sit.name().equals(interfaceType))) {
+            SearchInterfaceType searchInterfaceType = SearchInterfaceType.valueOf(interfaceType);
+            String errorMessageXpath = searchInterfaceType.getErrorMessageXpath();
+            if (Objects.nonNull(errorMessageXpath) && dataRecord.getOriginalData() instanceof String) {
+                Element originalDocument = XMLUtils.parseXMLString((String) dataRecord.getOriginalData()).getDocumentElement();
+                String errorMessage = XPathFactory.newInstance().newXPath().evaluate(errorMessageXpath, originalDocument);
+                if (StringUtils.isNotBlank(errorMessage)) {
+                    errorMessage = interfaceType.toUpperCase() + " error: '" + errorMessage + "'";
+                    throw new CatalogException(errorMessage);
+                }
+            }
+        } else {
+            throw e;
+        }
     }
 
     private NodeList extractMetadataNodeList(Document document) throws ProcessGenerationException {
@@ -1125,7 +1224,7 @@ public class ImportService {
             throws ProcessGenerationException, DAOException, IOException {
 
         Process parentProcess = null;
-        for (String identifierMetadata : getFunctionalMetadata(ruleset, FunctionalMetadata.RECORD_IDENTIFIER)) {
+        for (String identifierMetadata : RulesetService.getRecordIdentifierMetadata(ruleset)) {
             if (Objects.isNull(parentProcess)) {
                 HashMap<String, String> parentIDMetadata = new HashMap<>();
                 parentIDMetadata.put(identifierMetadata, parentId);
@@ -1180,9 +1279,15 @@ public class ImportService {
      *
      * @param tempProcesses list of TempProcesses to be checked
      * @return whether a title was changed or not
-     * @throws IOException if the meta.xml file of a process could not be loaded
+     * @throws IOException
+     *          when the meta.xml file of a process could not be loaded
+     * @throws SAXException
+     *          when an error occurs during XML validation of a process' metadata file
+     * @throws FileStructureValidationException
+     *          when XML validation of a process' metadata file fails
      */
-    public static boolean ensureNonEmptyTitles(LinkedList<TempProcess> tempProcesses) throws IOException {
+    public static boolean ensureNonEmptyTitles(LinkedList<TempProcess> tempProcesses) throws IOException, SAXException,
+            FileStructureValidationException {
         boolean changedTitle = false;
         for (TempProcess tempProcess : tempProcesses) {
             Process process = tempProcess.getProcess();
@@ -1386,7 +1491,7 @@ public class ImportService {
      * as metadata values.
      * @param metadata map containing metadata to
      * @param templateId ID of template whose ruleset contains definition of 'recordIdentifier' functional metadata
-     * @param strict boolean parameter controling whether an exception should be thrown or not if no 'recordIdentifier' was found
+     * @param strict boolean parameter controlling whether an exception should be thrown or not if no 'recordIdentifier' was found
      * @return value of metadata configured as 'recordIdentifier'
      * @throws ConfigException when no 'recordIdentifier' metadata was found in given metadata map
      * @throws IOException when loading ruleset file fails
@@ -1395,7 +1500,7 @@ public class ImportService {
     public String getRecordId(Map<String, List<String>> metadata, int templateId, boolean strict)
             throws ConfigException, IOException, DAOException {
         Template template = ServiceManager.getTemplateService().getById(templateId);
-        Collection<String> recordIdMetadataKeys = getRecordIdentifierMetadata(template.getRuleset());
+        Collection<String> recordIdMetadataKeys = RulesetService.getRecordIdentifierMetadata(template.getRuleset());
         if (recordIdMetadataKeys.isEmpty()) {
             if (strict) {
                 throw new ConfigException(Helper.getTranslation("massImport.recordIdentifierDefinitionMissing",
@@ -1406,7 +1511,7 @@ public class ImportService {
             if (metadata.containsKey(recordIdMetadataKey)) {
                 List<String> ids = metadata.get(recordIdMetadataKey);
                 if (ids.size() == 1) {
-                    return ids.iterator().next();
+                    return ids.getFirst();
                 }
             }
         }
@@ -1430,7 +1535,7 @@ public class ImportService {
     public String getDocType(Map<String, List<String>> metadata, int templateId)
             throws ConfigException, DAOException, IOException {
         Template template = ServiceManager.getTemplateService().getById(templateId);
-        Collection<String> docTypeMetadataKeys = getDocTypeMetadata(template.getRuleset());
+        Collection<String> docTypeMetadataKeys = RulesetService.getDocTypeMetadata(template.getRuleset());
         if (docTypeMetadataKeys.isEmpty()) {
             throw new ConfigException("At least one metadata in ruleset '" + template.getRuleset().getTitle()
                     + "' must be configured as 'docType'");
@@ -1439,7 +1544,7 @@ public class ImportService {
             if (metadata.containsKey(docTypeMetadataKey)) {
                 List<String> types = metadata.get(docTypeMetadataKey);
                 if (types.size() == 1) {
-                    return types.iterator().next();
+                    return types.getFirst();
                 }
             }
         }
@@ -1463,15 +1568,15 @@ public class ImportService {
             template = ServiceManager.getTemplateService().getById(templateId);
             String parentMetadataKey = "";
             List<String> higherLevelIdentifiers = new ArrayList<>(
-                    getHigherLevelIdentifierMetadata(template.getRuleset()));
+                    RulesetService.getHigherLevelIdentifierMetadata(template.getRuleset()));
             if (!higherLevelIdentifiers.isEmpty()) {
-                parentMetadataKey = higherLevelIdentifiers.get(0);
+                parentMetadataKey = higherLevelIdentifiers.getFirst();
             }
             String id = getRecordId(presetMetadata, templateId, true);
             final String parentId = importProcessAndReturnParentID(id, processList, importConfiguration, projectId,
-                    templateId, false, parentMetadataKey);
+                    templateId, false, parentMetadataKey, true);
             setParentProcess(parentId, projectId, template);
-            tempProcess = processList.get(0);
+            tempProcess = processList.getFirst();
             String metadataLanguage = ServiceManager.getUserService().getCurrentUser().getMetadataLanguage();
             tempProcess.getWorkpiece().getLogicalStructure().getMetadata().addAll(createMetadata(presetMetadata));
             processTempProcess(tempProcess, ServiceManager.getRulesetService().openRuleset(template.getRuleset()),
@@ -1482,12 +1587,9 @@ public class ImportService {
             ServiceManager.getProcessService().save(tempProcess.getProcess());
             saveTempProcessMetsFile(tempProcess);
             linkToParent(tempProcess);
-        } catch (DAOException | IOException | ProcessGenerationException | XPathExpressionException
-                 | ParserConfigurationException | NoRecordFoundException | UnsupportedFormatException
-                 | URISyntaxException | SAXException | InvalidMetadataValueException | NoSuchMetadataFieldException
-                 | CommandException | TransformerException | CatalogException | ConfigException e) {
+        } catch (Exception e) {
             logger.error(e);
-            throw new ImportException(e.getLocalizedMessage());
+            throw new ImportException(e.getMessage());
         }
         return tempProcess.getProcess();
     }
@@ -1505,11 +1607,13 @@ public class ImportService {
      * @throws NoSuchMetadataFieldException when temp process cannot be processed
      * @throws CommandException when creating metadata folder or file for process fails
      * @throws DAOException when linking to potential parent process fails
+     * @throws SAXException when linking to potential parent process fails
+     * @throws FileStructureValidationException when linking to potential parent process fails
      */
     public Process createProcessFromData(int projectId, int templateId,
                                       Map<String, List<String>> presetMetadata, String metadataSeparator)
             throws ProcessGenerationException, IOException, InvalidMetadataValueException, NoSuchMetadataFieldException,
-            CommandException, DAOException {
+            CommandException, DAOException, SAXException, FileStructureValidationException {
         if (Objects.isNull(processGenerator)) {
             processGenerator = new ProcessGenerator();
         }
@@ -1527,7 +1631,7 @@ public class ImportService {
         }
         TempProcess tempProcess = new TempProcess(process, docType, presetMetadata, rulesetManagementInterface, metadataSeparator);
 
-        for (String parentIdMetadataKey : getHigherLevelIdentifierMetadata(process.getRuleset())) {
+        for (String parentIdMetadataKey : RulesetService.getHigherLevelIdentifierMetadata(process.getRuleset())) {
             if (presetMetadata.containsKey(parentIdMetadataKey)) {
                 for (String parentIdValue : presetMetadata.get(parentIdMetadataKey)) {
                     if (Objects.nonNull(parentIdValue)) {
@@ -1581,7 +1685,8 @@ public class ImportService {
         }
     }
 
-    private void linkToParent(TempProcess tempProcess) throws DAOException, ProcessGenerationException, IOException {
+    private void linkToParent(TempProcess tempProcess) throws DAOException, ProcessGenerationException, IOException,
+            SAXException, FileStructureValidationException {
         if (Objects.nonNull(parentTempProcess) && Objects.nonNull(parentTempProcess.getProcess())) {
             URI parentProcessUri = ServiceManager.getProcessService()
                     .getMetadataFileUri(parentTempProcess.getProcess());
@@ -1598,22 +1703,11 @@ public class ImportService {
         }
     }
 
-    private void setParentProcess(String parentId, int projectId, Template template)
-            throws DAOException, IOException, ProcessGenerationException {
+    private void setParentProcess(String parentId, int projectId, Template template) {
         parentTempProcess = null;
         if (StringUtils.isNotBlank(parentId)) {
             checkForParent(parentId, template.getRuleset(), projectId);
         }
-    }
-
-    private static Collection<String> getFunctionalMetadata(Ruleset ruleset, FunctionalMetadata metadata)
-            throws IOException {
-        RulesetManagementInterface rulesetManagement = ServiceManager.getRulesetManagementService()
-                .getRulesetManagement();
-        String rulesetDir = ConfigCore.getParameter(ParameterCore.DIR_RULESETS);
-        String rulesetPath = Paths.get(rulesetDir, ruleset.getFile()).toString();
-        rulesetManagement.load(new File(rulesetPath));
-        return rulesetManagement.getFunctionalKeys(metadata);
     }
 
     private List<MetadataEntry> createMetadata(Map<String, List<String>> presetMetadata) {
@@ -1634,47 +1728,13 @@ public class ImportService {
         List<String> labelList = presetMetadata.get(ProcessFieldedMetadata.METADATA_KEY_LABEL);
         List<String> orderLabelList = presetMetadata.get(ProcessFieldedMetadata.METADATA_KEY_ORDERLABEL);
 
-        if (Objects.nonNull(labelList) && !labelList.isEmpty() && !labelList.get(0).isBlank()) {
-            tempProcess.getWorkpiece().getLogicalStructure().setLabel(labelList.get(0));
+        if (Objects.nonNull(labelList) && !labelList.isEmpty() && !labelList.getFirst().isBlank()) {
+            tempProcess.getWorkpiece().getLogicalStructure().setLabel(labelList.getFirst());
         }
 
-        if (Objects.nonNull(orderLabelList) && !orderLabelList.isEmpty() && !orderLabelList.get(0).isBlank()) {
-            tempProcess.getWorkpiece().getLogicalStructure().setOrderlabel(orderLabelList.get(0));
+        if (Objects.nonNull(orderLabelList) && !orderLabelList.isEmpty() && !orderLabelList.getFirst().isBlank()) {
+            tempProcess.getWorkpiece().getLogicalStructure().setOrderlabel(orderLabelList.getFirst());
         }
-    }
-
-    public static Collection<String> getRecordIdentifierMetadata(Ruleset ruleset) throws IOException {
-        return getFunctionalMetadata(ruleset, FunctionalMetadata.RECORD_IDENTIFIER);
-    }
-
-    /**
-     * Load doc type metadata keys from provided ruleset.
-     * @param ruleset Ruleset from which doc type metadata keys are loaded and returned
-     * @return list of Strings containing the IDs of the doc type metadata defined in the provided ruleset.
-     * @throws IOException thrown if ruleset file cannot be loaded
-     */
-    public static Collection<String> getDocTypeMetadata(Ruleset ruleset) throws IOException {
-        return getFunctionalMetadata(ruleset, FunctionalMetadata.DOC_TYPE);
-    }
-
-    /**
-     * Load and return higher level identifier metadata keys from provided ruleset.
-     * @param ruleset Ruleset from which higher level identifier metadata keys are loaded and returned
-     * @return list of String containing the keys of metadata defined as higher level identifier
-     * @throws IOException thrown if ruleset file cannot be loaded
-     */
-    public static Collection<String> getHigherLevelIdentifierMetadata(Ruleset ruleset) throws IOException {
-        return getFunctionalMetadata(ruleset, FunctionalMetadata.HIGHERLEVEL_IDENTIFIER);
-    }
-
-    /**
-     * Load and return keys of functional metadata 'groupDisplayLabel' from provided ruleset.
-     * @param ruleset Ruleset from which keys are loaded and returned
-     * @return list of String containing the keys of functional metadata for type 'groupDisplayLabel'
-     * @throws IOException thrown if ruleset file cannot be loaded
-     */
-    public static Collection<String> getGroupDisplayLabelMetadata(Ruleset ruleset) throws IOException {
-        return getFunctionalMetadata(ruleset, FunctionalMetadata.GROUP_DISPLAY_LABEL);
     }
 
     private DataImport createDataImportFromImportConfiguration(ImportConfiguration importConfiguration) {
@@ -1776,7 +1836,7 @@ public class ImportService {
 
     /**
      * Returns the details of the missing record identifier error.
-     * 
+     *
      * @return the details as a list of error description
      */
     public Collection<RecordIdentifierMissingDetail> getDetailsOfRecordIdentifierMissingError() {
@@ -1873,11 +1933,12 @@ public class ImportService {
      * @throws ParserConfigurationException when creating TempProcesses fails
      * @throws URISyntaxException when creating TempProcesses fails
      * @throws SAXException when creating TempProcesses fails
+     * @throws FileStructureValidationException when validation of EAD data fails
      */
     public LinkedList<TempProcess> processUploadedFile(CreateProcessForm createProcessForm)
             throws ProcessGenerationException, IOException, InvalidMetadataValueException, TransformerException,
             NoSuchMetadataFieldException, UnsupportedFormatException, XPathExpressionException,
-            ParserConfigurationException, URISyntaxException, SAXException {
+            ParserConfigurationException, URISyntaxException, SAXException, FileStructureValidationException {
         LinkedList<TempProcess> processes = new LinkedList<>();
         ImportConfiguration importConfiguration = createProcessForm.getCurrentImportConfiguration();
         DataRecord externalRecord = XMLUtils.createRecordFromXMLElement(createProcessForm.getXmlString(),
@@ -1885,11 +1946,11 @@ public class ImportService {
         if (MetadataFormat.EAD.name().equals(importConfiguration.getMetadataFormat())) {
             LinkedList<TempProcess> eadProcesses = parseImportedEADCollection(externalRecord, importConfiguration,
                     createProcessForm.getProject().getId(), createProcessForm.getTemplate().getId(),
-                    createProcessForm.getSelectedEadLevel(), createProcessForm.getSelectedParentEadLevel());
+                    createProcessForm.getSelectedEadLevel(), createProcessForm.getSelectedParentEadLevel(), true);
             createProcessForm.setChildProcesses(new LinkedList<>(eadProcesses.subList(1, eadProcesses.size())));
-            processes = new LinkedList<>(Collections.singletonList(eadProcesses.get(0)));
+            processes = new LinkedList<>(Collections.singletonList(eadProcesses.getFirst()));
         } else {
-            Document internalDocument = convertDataRecordToInternal(externalRecord, importConfiguration, false);
+            Document internalDocument = convertDataRecordToInternal(externalRecord, importConfiguration, false, false, "N/A");
             TempProcess tempProcess = createTempProcessFromDocument(importConfiguration, internalDocument,
                     createProcessForm.getTemplate().getId(), createProcessForm.getProject().getId());
             processes.add(tempProcess);
@@ -1911,64 +1972,21 @@ public class ImportService {
         return processes;
     }
 
-    /**
-     * Retrieve and return label of metadata with given key 'metadataKey'.
-     *
-     * @param ruleset RulesetManagementInterface from which metadata label is retrieved
-     * @param metadataKey key of metadata for which label ir retrieved
-     * @param groupSeparator SeparatorCharacter separating metadata group entries
-     * @return label of metadata
-     * @throws IOException if ruleset file could not be read
-     */
-    public String getMetadataTranslation(RulesetManagementInterface ruleset, String metadataKey, SeparatorCharacter groupSeparator)
-            throws IOException {
-        User user = ServiceManager.getUserService().getCurrentUser();
-        String metadataLanguage = user.getMetadataLanguage();
-        List<Locale.LanguageRange> languages = Locale.LanguageRange.parse(metadataLanguage.isEmpty()
-                ? Locale.ENGLISH.getCountry() : metadataLanguage);
-        if (Objects.isNull(groupSeparator) || StringUtils.isBlank(groupSeparator.getSeparator())
-                || !metadataKey.contains(groupSeparator.getSeparator())) {
-            return ruleset.getTranslationForKey(metadataKey, languages).orElse(metadataKey);
-        } else {
-            String separator = groupSeparator.getSeparator();
-            List<String> keyHierarchy = List.of(metadataKey.split(Pattern.quote(separator)));
-            List<String> translatedKeys = new LinkedList<>();
-            String groupLabel = "";
-            for (String key : keyHierarchy) {
-                if (keyHierarchy.indexOf(key) == 0) {
-                    groupLabel = ruleset.getTranslationForKey(keyHierarchy.get(0), languages).orElse(metadataKey);
-                } else {
-                    List<String> nestedKeys = new LinkedList<>();
-                    nestedKeys.add(keyHierarchy.get(0));
-                    nestedKeys.add(key);
-                    Optional<String> nestedKeyTranslation = ruleset.getTranslationForKey(nestedKeys, languages);
-                    if (nestedKeyTranslation.isPresent()) {
-                        translatedKeys.add(nestedKeyTranslation.get());
-                    } else {
-                        translatedKeys.add(key);
-                    }
-                }
-            }
-            return groupLabel + " (" + String.join(separator, translatedKeys) + ")";
-        }
-    }
-
     private TempProcess extractParentRecordFromFile(Document internalDocument, CreateProcessForm createProcessForm)
             throws XPathExpressionException, UnsupportedFormatException, URISyntaxException, IOException,
-            ParserConfigurationException, SAXException, ProcessGenerationException, TransformerException {
+            ParserConfigurationException, SAXException, ProcessGenerationException, TransformerException, FileStructureValidationException {
         Collection<String> higherLevelIdentifier = createProcessForm.getRulesetManagement()
                 .getFunctionalKeys(FunctionalMetadata.HIGHERLEVEL_IDENTIFIER);
 
         if (!higherLevelIdentifier.isEmpty()) {
             ImportConfiguration importConfiguration = createProcessForm.getCurrentImportConfiguration();
-            ImportService importService = ServiceManager.getImportService();
-            String parentID = importService.getParentID(internalDocument, higherLevelIdentifier.toArray()[0].toString(),
+            String parentID = getParentID(internalDocument, higherLevelIdentifier.toArray()[0].toString(),
                     importConfiguration.getParentElementTrimMode());
             if (Objects.nonNull(parentID) && Objects.nonNull(importConfiguration.getParentMappingFile())) {
-                Document internalParentDocument = importService.convertDataRecordToInternal(
+                Document internalParentDocument = convertDataRecordToInternal(
                         XMLUtils.createRecordFromXMLElement(createProcessForm.getXmlString(), importConfiguration),
-                        importConfiguration, true);
-                return importService.createTempProcessFromDocument(importConfiguration, internalParentDocument,
+                        importConfiguration, true, false, parentID);
+                return createTempProcessFromDocument(importConfiguration, internalParentDocument,
                         createProcessForm.getTemplate().getId(), createProcessForm.getProject().getId());
             }
         }

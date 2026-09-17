@@ -25,15 +25,17 @@ import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.persistence.PersistenceException;
+import jakarta.persistence.PersistenceException;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.hibernate.Hibernate;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 import org.hibernate.exception.SQLGrammarException;
+import org.hibernate.query.CommonQueryContract;
+import org.hibernate.query.MutationQuery;
 import org.hibernate.query.Query;
 import org.kitodo.config.ConfigMain;
 import org.kitodo.data.database.beans.BaseBean;
@@ -124,6 +126,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
     public void remove(T baseBean) throws DAOException {
         if (baseBean.getId() != null) {
             try (Session session = HibernateUtil.getSession()) {
+                Stopwatch stopwatch = new Stopwatch(baseBean, "remove");
                 Transaction transaction = session.beginTransaction();
                 synchronized (lockObject) {
                     Object merged = session.merge(baseBean);
@@ -131,6 +134,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
                     session.flush();
                     transaction.commit();
                 }
+                stopwatch.stop();
             } catch (PersistenceException e) {
                 throw new DAOException(e);
             }
@@ -194,7 +198,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
                     new TreeMap<>(parameters).toString(), "first", Integer.toString(first), "max", Integer.toString(
                         max));
             List<?> objects = q.list();
-            if (objects.isEmpty() || objects.get(0) instanceof BaseBean) {
+            if (objects.isEmpty() || objects.getFirst() instanceof BaseBean) {
                 return stopwatch.stop((List<T>) objects);
             } else {
                 return stopwatch.stop((List<T>) (List<?>) ((List<Object[]>) objects).stream().map(array -> array[0])
@@ -220,7 +224,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
             debugLogQuery(query, parameters);
             Query<T> q = session.createQuery(query);
             addParameters(q, parameters);
-            if (logger.isTraceEnabled() && !StringUtils.containsIgnoreCase(query, " WHERE ")) {
+            if (logger.isTraceEnabled() && !Strings.CI.contains(query, " WHERE ")) {
                 logger.trace("Probable performance issue:", new Throwable(
                         "Location where the code loads ALL object instances"));
             }
@@ -246,7 +250,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
         try (Session session = HibernateUtil.getSession()) {
             debugLogQuery(query, Collections.emptyMap());
             Query<T> queryObject = session.createQuery(query);
-            if (logger.isTraceEnabled() && !StringUtils.containsIgnoreCase(query, " WHERE ")) {
+            if (logger.isTraceEnabled() && !Strings.CI.contains(query, " WHERE ")) {
                 logger.trace("Probable performance issue:", new Throwable(
                         "Location where the code loads ALL object instances"));
             }
@@ -274,7 +278,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
             debugLogQuery(query, parameters);
             Query<String> queryObject = session.createQuery(query);
             addParameters(queryObject, parameters);
-            if (logger.isTraceEnabled() && !StringUtils.containsIgnoreCase(query, " WHERE ")) {
+            if (logger.isTraceEnabled() && !Strings.CI.contains(query, " WHERE ")) {
                 logger.trace("Probable performance issue:", new Throwable(
                         "Location where the code loads ALL object instances"));
             }
@@ -377,6 +381,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
      */
     static void removeObject(Class<?> cls, Integer objectId) throws DAOException {
         try (Session session = HibernateUtil.getSession()) {
+            Stopwatch stopwatch = new Stopwatch(objectId, "removeObject");
             Transaction transaction = session.beginTransaction();
             synchronized (lockObject) {
                 Object object = session.load(cls, objectId);
@@ -384,6 +389,7 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
                 session.flush();
                 transaction.commit();
             }
+            stopwatch.stop();
         } catch (PersistenceException e) {
             if (e.getMessage().startsWith("No row with the given identifier exists")) {
                 return;
@@ -492,13 +498,34 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
         try (Session session = HibernateUtil.getSession()) {
             String query = String.format("FROM %s ORDER BY id ASC", cls.getSimpleName());
             debugLogQuery(query, Collections.emptyMap());
-            if (logger.isTraceEnabled() && !StringUtils.containsIgnoreCase(query, " WHERE ")) {
+            if (logger.isTraceEnabled() && !Strings.CI.contains(query, " WHERE ")) {
                 logger.trace("Probable performance issue:", new Throwable(
                         "Location where the code loads ALL object instances"));
             }
             Query<T> queryObject = session.createQuery(query);
             Stopwatch stopwatch = new Stopwatch(cls, (Object) query, "retrieveAllObjects");
             return stopwatch.stop(queryObject.list());
+        } catch (PersistenceException e) {
+            throw new DAOException(e);
+        }
+    }
+
+    /**
+     * Executes an update or delete HQL query.
+     *
+     * @param query
+     *            HQL query to execute
+     * @param parameters
+     *            named query parameters
+     */
+    public void executeUpdate(String query, Map<String, Object> parameters) throws DAOException {
+        try (Session session = HibernateUtil.getSession()) {
+            debugLogQuery(query, parameters);
+            Transaction transaction = session.beginTransaction();
+            MutationQuery mutationQuery = session.createMutationQuery(query);
+            addMutationParameters(mutationQuery, parameters);
+            mutationQuery.executeUpdate();
+            transaction.commit();
         } catch (PersistenceException e) {
             throw new DAOException(e);
         }
@@ -592,7 +619,15 @@ public abstract class BaseDAO<T extends BaseBean> implements Serializable {
         }
     }
 
+    private void addMutationParameters(MutationQuery query, Map<String, Object> parameters) {
+        addParameters(parameters, query);
+    }
+
     private void addParameters(Query<?> query, Map<String, Object> parameters) {
+        addParameters(parameters, query);
+    }
+
+    private void addParameters(Map<String, Object> parameters, CommonQueryContract query) {
         if (Objects.nonNull(parameters)) {
             for (Map.Entry<String, Object> parameter : parameters.entrySet()) {
                 if (parameter.getValue() instanceof List) {

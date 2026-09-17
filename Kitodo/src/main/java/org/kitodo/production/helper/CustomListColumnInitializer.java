@@ -15,12 +15,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.stream.Collectors;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.context.Initialized;
-import javax.enterprise.event.Observes;
-import javax.servlet.ServletContext;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.Initialized;
+import jakarta.enterprise.event.Observes;
+import jakarta.servlet.ServletContext;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -59,10 +58,8 @@ public class CustomListColumnInitializer {
         } catch (DAOException e) {
             logger.error("Unable to update custom list columns in database!");
         } catch (NoSuchElementException e) {
-            logger.info("Configuration key '"
-                    + ParameterCore.PROCESS_PROPERTIES
-                    + "' or '" + ParameterCore.TASK_CUSTOM_COLUMNS
-                    + "' not found in configuration => unable to load corresponding custom columns!");
+            logger.info("Configuration key '{}' or '{}' not found in configuration => unable to load corresponding custom columns!",
+                    ParameterCore.PROCESS_PROPERTIES, ParameterCore.TASK_CUSTOM_COLUMNS);
         }
     }
 
@@ -115,7 +112,7 @@ public class CustomListColumnInitializer {
 
         List<String> availableColumnNames = ServiceManager.getListColumnService().getAllCustomListColumns().stream()
                 .map(ListColumn::getTitle)
-                .collect(Collectors.toList());
+                .toList();
         logger.info("Loading custom column names from configuration file...");
         for (String ccn : customColumnList) {
             if (!ccn.trim().isEmpty()) {

@@ -22,13 +22,12 @@ import java.util.Locale.LanguageRange;
 import java.util.Objects;
 import java.util.Set;
 
-import javax.jms.JMSException;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.transform.TransformerException;
 import javax.xml.xpath.XPathExpressionException;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import jakarta.jms.JMSException;
+
 import org.kitodo.api.Metadata;
 import org.kitodo.api.dataeditor.rulesetmanagement.FunctionalMetadata;
 import org.kitodo.api.dataeditor.rulesetmanagement.RulesetManagementInterface;
@@ -38,6 +37,7 @@ import org.kitodo.config.enums.ParameterCore;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.exceptions.CommandException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.InvalidMetadataValueException;
 import org.kitodo.exceptions.NoRecordFoundException;
 import org.kitodo.exceptions.NoSuchMetadataFieldException;
@@ -55,7 +55,6 @@ import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.ImportService;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.production.services.data.RulesetService;
-import org.kitodo.production.services.data.TaskService;
 import org.kitodo.production.services.dataformat.MetsService;
 import org.kitodo.production.services.file.FileService;
 import org.xml.sax.SAXException;
@@ -64,8 +63,6 @@ import org.xml.sax.SAXException;
  * An Active MQ service interface to create new processes.
  */
 public class CreateNewProcessesProcessor extends ActiveMQProcessor {
-    private static final Logger logger = LogManager.getLogger(CreateNewProcessesProcessor.class);
-
     private static final int IMPORT_WITHOUT_ANY_HIERARCHY = 1;
     private static final String LAST_CHILD = Integer.toString(-1);
     private static final List<LanguageRange> METADATA_LANGUAGE = Locale.LanguageRange.parse("en");
@@ -75,7 +72,6 @@ public class CreateNewProcessesProcessor extends ActiveMQProcessor {
     private final MetsService metsService = ServiceManager.getMetsService();
     private final ProcessService processService = ServiceManager.getProcessService();
     private final RulesetService rulesetService = ServiceManager.getRulesetService();
-    private final TaskService taskService = ServiceManager.getTaskService();
 
     private RulesetManagementInterface rulesetManagement;
 
@@ -102,10 +98,10 @@ public class CreateNewProcessesProcessor extends ActiveMQProcessor {
             createProcess(tempProcess, process, parentProcess);
 
         } catch (CommandException | DAOException | InvalidMetadataValueException | IOException
-                | NoRecordFoundException | NoSuchMetadataFieldException | ParserConfigurationException
-                | ProcessGenerationException | SAXException | TransformerException | UnsupportedFormatException
-                | URISyntaxException | XPathExpressionException e) {
-            throw new ProcessorException(e.getMessage());
+                 | NoRecordFoundException | NoSuchMetadataFieldException | ParserConfigurationException
+                 | ProcessGenerationException | SAXException | TransformerException | UnsupportedFormatException
+                 | URISyntaxException | XPathExpressionException | FileStructureValidationException e) {
+            throw new ProcessorException(e);
         }
     }
 
@@ -116,7 +112,7 @@ public class CreateNewProcessesProcessor extends ActiveMQProcessor {
             InvalidMetadataValueException,
             IOException, NoRecordFoundException, NoSuchMetadataFieldException, ParserConfigurationException,
             ProcessGenerationException, ProcessorException, SAXException, TransformerException,
-            UnsupportedFormatException, URISyntaxException, XPathExpressionException {
+            UnsupportedFormatException, URISyntaxException, XPathExpressionException, FileStructureValidationException {
 
         if (order.getImports().isEmpty()) {
             ProcessGenerator processGenerator = new ProcessGenerator();
@@ -151,18 +147,19 @@ public class CreateNewProcessesProcessor extends ActiveMQProcessor {
     private TempProcess importProcess(CreateNewProcessOrder order, int which) throws DAOException,
             InvalidMetadataValueException, IOException, NoRecordFoundException, NoSuchMetadataFieldException,
             ParserConfigurationException, ProcessGenerationException, ProcessorException, SAXException,
-            TransformerException, UnsupportedFormatException, URISyntaxException, XPathExpressionException {
+            TransformerException, UnsupportedFormatException, URISyntaxException, XPathExpressionException,
+            FileStructureValidationException {
 
         List<TempProcess> processHierarchy = importService.importProcessHierarchy(
                 order.getImports().get(which).getValue(), order.getImports().get(which).getKey(),
                 order.getProjectId(), order.getTemplateId(), IMPORT_WITHOUT_ANY_HIERARCHY,
-                rulesetManagement.getFunctionalKeys(FunctionalMetadata.HIGHERLEVEL_IDENTIFIER));
-        if (processHierarchy.size() == 0) {
+                rulesetManagement.getFunctionalKeys(FunctionalMetadata.HIGHERLEVEL_IDENTIFIER), false);
+        if (processHierarchy.isEmpty()) {
             throw new ProcessorException("Process was not imported");
         } else if (processHierarchy.size() > 1) {
             throw new ProcessorException(processHierarchy.size() + " processes were imported");
         }
-        return processHierarchy.get(0);
+        return processHierarchy.getFirst();
     }
 
     /* In the second and middle part of the processing routine, the process
@@ -188,7 +185,7 @@ public class CreateNewProcessesProcessor extends ActiveMQProcessor {
     /* In the third and final part of the processing routine, the process is
      * created and saved. */
     private void createProcess(TempProcess tempProcess, Process process, Process parentProcess) throws DAOException,
-            IOException, CommandException {
+            IOException, CommandException, SAXException, FileStructureValidationException {
 
         processService.save(process);
         fileService.createProcessLocation(process);

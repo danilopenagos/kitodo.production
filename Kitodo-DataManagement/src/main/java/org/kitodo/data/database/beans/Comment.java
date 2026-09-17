@@ -14,17 +14,19 @@ package org.kitodo.data.database.beans;
 import java.util.Date;
 import java.util.Objects;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.ForeignKey;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
 
 import org.kitodo.data.database.enums.CommentType;
+import org.kitodo.data.database.persistence.ProcessDAO;
+import org.kitodo.data.database.persistence.TaskDAO;
 
 @Entity
 @Table(name = "comment")
@@ -38,7 +40,7 @@ public class Comment extends BaseBean {
     /**
      * The field type holds the comment type.
      */
-    @Column(name = "type")
+    @Column(name = "type", columnDefinition = "VARCHAR")
     @Enumerated(EnumType.STRING)
     private CommentType type;
 
@@ -71,14 +73,14 @@ public class Comment extends BaseBean {
     /**
      * This field contains information about the currentTask, when the comment is created.
      */
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "currentTask_id", foreignKey = @ForeignKey(name = "FK_comment_currentTask_id"))
     private Task currentTask;
 
     /**
      * This field contains information about the correctionTask, where the user can correct the error.
      */
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "correctionTask_id", foreignKey = @ForeignKey(name = "FK_comment_correctionTask_id"))
     private Task correctionTask;
 
@@ -86,7 +88,7 @@ public class Comment extends BaseBean {
     /**
      * The field process holds the process of the comment.
      */
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "process_id", foreignKey = @ForeignKey(name = "FK_comment_process_id"))
     private Process process;
 
@@ -212,6 +214,7 @@ public class Comment extends BaseBean {
      * @return value of currentTask
      */
     public Task getCurrentTask() {
+        initialize(new TaskDAO(), currentTask);
         return currentTask;
     }
 
@@ -230,6 +233,7 @@ public class Comment extends BaseBean {
      * @return value of correctionTask
      */
     public Task getCorrectionTask() {
+        initialize(new TaskDAO(), correctionTask);
         return correctionTask;
     }
 
@@ -248,6 +252,7 @@ public class Comment extends BaseBean {
      * @return value of process
      */
     public Process getProcess() {
+        initialize(new ProcessDAO(), process);
         return process;
     }
 

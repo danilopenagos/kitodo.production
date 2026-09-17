@@ -27,6 +27,8 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
@@ -54,11 +56,16 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
 
 /**
  * The class XMLUtils contains an omnium-gatherum of functions that work on XML.
  */
 public class XMLUtils {
+
+    private static final String DISALLOW_DOCTYPE_DECL = "http://apache.org/xml/features/disallow-doctype-decl";
+    private static final String EXTERNAL_GENERAL_ENTITIES = "http://xml.org/sax/features/external-general-entities";
+    private static final String EXTERNAL_PARAMETER_ENTITIES = "http://xml.org/sax/features/external-parameter-entities";
 
     /**
      * Private constructor to hide the implicit public one.
@@ -179,6 +186,7 @@ public class XMLUtils {
             SAXException {
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
+        disableExternalEntities(factory);
         DocumentBuilder builder = factory.newDocumentBuilder();
         xmlString = removeBom(xmlString);
         return builder.parse(new InputSource(new ByteArrayInputStream(xmlString.getBytes(StandardCharsets.UTF_8))));
@@ -276,6 +284,8 @@ public class XMLUtils {
     public static int getNumberOfEADElements(String xmlString, String eadLevel) throws XMLStreamException {
         int count = 0;
         XMLInputFactory factory = XMLInputFactory.newInstance();
+        factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         XMLStreamReader reader = factory.createXMLStreamReader(new StringReader(xmlString));
         while (reader.hasNext()) {
             int event = reader.next();
@@ -289,4 +299,45 @@ public class XMLUtils {
         return count;
     }
 
+    /**
+     * Checks if the provided XML content is well-formed.
+     * If the XML is not well-formed, an exception is thrown.
+     *
+     * @param xmlContent the XML content as a String to be checked for well-formedness
+     * @throws IOException if an I/O error occurs during processing
+     * @throws SAXException if the XML content is not well-formed or an error occurs during parsing
+     */
+    public static void checkIfXmlIsWellFormed(String xmlContent) throws IOException, SAXException {
+        SAXParser saxParser;
+        try {
+            SAXParserFactory saxParserFactory = SAXParserFactory.newInstance();
+            saxParserFactory.setValidating(false);
+            saxParserFactory.setNamespaceAware(true);
+            saxParserFactory.setFeature(DISALLOW_DOCTYPE_DECL, true);
+
+            saxParser = saxParserFactory.newSAXParser();
+        } catch (ParserConfigurationException | SAXException e) {
+            throw new RuntimeException(e);
+        }
+        InputSource inputSource = new InputSource(new StringReader(xmlContent));
+        saxParser.parse(inputSource, new DefaultHandler());
+    }
+
+    /**
+     * Disable DOCTYPE declarations and external entity resolution on the given
+     * factory to prevent XML External Entity (XXE) injection. This mirrors the
+     * secure configuration already used by {@link #load(InputStream)} and the
+     * external-catalog response parsers.
+     *
+     * @param factory the DocumentBuilderFactory to harden
+     * @throws ParserConfigurationException if a feature cannot be set
+     */
+    private static void disableExternalEntities(DocumentBuilderFactory factory) throws ParserConfigurationException {
+        factory.setFeature(DISALLOW_DOCTYPE_DECL, true);
+        factory.setFeature(EXTERNAL_GENERAL_ENTITIES, false);
+        factory.setFeature(EXTERNAL_PARAMETER_ENTITIES, false);
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+    }
 }

@@ -16,7 +16,7 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
-import javax.faces.context.FacesContext;
+import jakarta.faces.context.FacesContext;
 
 /**
  * Caches arbitrary objects while processing a request.
@@ -73,7 +73,9 @@ public class RequestScopeCacheHelper {
             // save value if it does not yet exist
             if (!cache.containsKey(key)) {
                 T value = supplier.get();
-                cache.put(key, value);
+                if (Objects.nonNull(value)) {
+                    cache.put(key, value);
+                }
             };
             return clazz.cast(cache.get(key));
         }

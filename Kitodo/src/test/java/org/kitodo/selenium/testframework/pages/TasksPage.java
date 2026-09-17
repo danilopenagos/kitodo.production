@@ -38,11 +38,11 @@ public class TasksPage extends Page<TasksPage> {
     private static final String WAIT_FOR_FILTER_FORM_MENU = "Wait for filter form menu to open";
     private static final String WAIT_FOR_TASK_TABLE_COLUMN_SORT = "Wait for task table column sort";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TASK_TABLE_DATA)
     private WebElement taskTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TASK_TABLE_HEADER)
     private WebElement taskTableHeader;
 
@@ -53,7 +53,7 @@ public class TasksPage extends Page<TasksPage> {
     @FindBy(id = "filterInputForm:filterfield")
     private WebElement filterField;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "filterOptionsFormWrapper")
     private WebElement filterOptionsMenu;
 
@@ -61,7 +61,7 @@ public class TasksPage extends Page<TasksPage> {
     private WebElement inWorkStatusCheckbox;
 
     public TasksPage() {
-        super("pages/tasks.jsf");
+        super("pages/tasks");
     }
 
     /**
@@ -84,11 +84,11 @@ public class TasksPage extends Page<TasksPage> {
         String secondElementId = TASK_TABLE + ":" + index + ":taskDetailTableSecond";
         await("Wait for first task details to become visible").atMost(3, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertTrue(Browser.getDriver().findElement(By.id(firstElementId)).isDisplayed()));
-                WebElement firstDetails = Browser.getDriver().findElementById(firstElementId);
+                WebElement firstDetails = Browser.getDriver().findElement(By.id(firstElementId));
         List<String> taskDetails = getTableDataByColumn(firstDetails, 1);
         await("Wait for second task details to become visible").atMost(3, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertTrue(Browser.getDriver().findElement(By.id(secondElementId)).isDisplayed()));
-                WebElement secondDetails = Browser.getDriver().findElementById(secondElementId);
+                WebElement secondDetails = Browser.getDriver().findElement(By.id(secondElementId));
         taskDetails.addAll(getTableDataByColumn(secondDetails, 1));
         return taskDetails;
     }
@@ -202,19 +202,19 @@ public class TasksPage extends Page<TasksPage> {
     public String getFirstRowTaskTitle() {
         List<String> taskTitles = getTableDataByColumn(taskTable, 1);
         if (!taskTitles.isEmpty()) {
-            return taskTitles.get(0);
+            return taskTitles.getFirst();
         }
         return "";
     }
 
     private void setEditTaskLink(String taskTitle, String processTitle) {
         int index = getRowIndexForTask(taskTable, taskTitle, processTitle);
-        editTaskLink = Browser.getDriver().findElementById(TASK_TABLE + ":" + index + ":editOwnTask");
+        editTaskLink = Browser.getDriver().findElement(By.id(TASK_TABLE + ":" + index + ":editOwnTask"));
     }
 
     private void setTakeTaskLink(String taskTitle, String processTitle) {
         int index = getRowIndexForTask(taskTable, taskTitle, processTitle);
-        takeTaskLink = Browser.getDriver().findElementById(TASK_TABLE + ":" + index + ":take");
+        takeTaskLink = Browser.getDriver().findElement(By.id(TASK_TABLE + ":" + index + ":take"));
     }
 
     private int getRowIndexForTask(WebElement dataTable, String searchedTaskTitle, String searchedProcessTitle) {

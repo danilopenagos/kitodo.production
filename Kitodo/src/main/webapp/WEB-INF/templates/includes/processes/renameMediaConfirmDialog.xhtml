@@ -27,12 +27,12 @@
         <h:form id="renameMediaConfirmForm">
             <h3>#{msgs.renameMedia}</h3>
             <p:panelGrid columns="1" layout="grid">
-                <p:row>
+
                     <h:panelGroup layout="block"
                                   style="max-height: unset; overflow-y: auto;"
                                   styleClass="dialogFieldWrapper">
                         <div>
-                            <h:outputText value="#{ProcessForm.mediaRenamingConfirmMessage}"/>
+                            <h:outputText value="#{ProcessListView.mediaRenamingConfirmMessage}"/>
                         </div>
                     </h:panelGroup>
                     <h:panelGroup layout="block"
@@ -40,7 +40,7 @@
                         <p:commandButton value="#{msgs.ok}"
                                          id="confirm"
                                          onclick="PF('renameMediaConfirmDialog').hide();"
-                                         action="#{ProcessForm.startRenaming()}"
+                                         action="#{ProcessListView.startRenaming()}"
                                          styleClass="primary right">
                         </p:commandButton>
                         <p:commandButton value="#{msgs.cancel}"
@@ -52,7 +52,7 @@
                                          onclick="PF('renameMediaConfirmDialog').hide();">
                         </p:commandButton>
                     </h:panelGroup>
-                </p:row>
+
             </p:panelGrid>
         </h:form>
     </p:dialog>

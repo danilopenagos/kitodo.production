@@ -23,8 +23,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.faces.context.FacesContext;
-import javax.faces.model.SelectItem;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.model.SelectItem;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -99,7 +99,7 @@ public class MediaPartialsPanel implements Serializable {
 
         LogicalDivision logicalDivision = mediaPartialDivision.getKey();
         if (dataEditor.getStructurePanel()
-                .deletePhysicalDivision(logicalDivision.getViews().getFirst().getPhysicalDivision())) {
+                .deletePhysicalDivision(logicalDivision.getViews().getFirst().getPhysicalDivision(), null)) {
             logicalDivision.getViews().remove();
             dataEditor.getStructurePanel().deleteLogicalDivision(logicalDivision);
             calculateExtentAndSortMediaPartials(getMediaSelection().getValue().getChildren(),
@@ -138,18 +138,22 @@ public class MediaPartialsPanel implements Serializable {
     public List<SelectItem> getMediaPartialChildDivisionsOfSelection() {
         List<SelectItem> mediaPartialDivisions = new ArrayList<>();
         Pair<PhysicalDivision, LogicalDivision> lastSelection = dataEditor.getGalleryPanel().getLastSelection();
-        if (Objects.nonNull(lastSelection) && MediaUtil.isAudioOrVideo(
-                dataEditor.getGalleryPanel().getGalleryMediaContent(lastSelection.getKey()).getMediaViewMimeType())) {
-            mediaPartialDivisions.addAll(DataEditorService.getSortedAllowedSubstructuralElements(
-                    dataEditor.getRulesetManagement()
-                    .getStructuralElementView(lastSelection.getRight().getType(), dataEditor.getAcquisitionStage(),
-                            dataEditor.getPriorityList()), dataEditor.getProcess().getRuleset()));
-            Collection<String> mediaPartialDivisionIds = dataEditor.getRulesetManagement()
-                    .getFunctionalDivisions(FunctionalDivision.MEDIA_PARTIAL);
-            mediaPartialDivisions = mediaPartialDivisions.stream()
-                    .filter(selectItem -> selectItem.getValue() instanceof String)
-                    .filter(selectItem -> mediaPartialDivisionIds.contains((String) selectItem.getValue()))
-                    .collect(Collectors.toList());
+        if (Objects.nonNull(lastSelection)) {
+            GalleryMediaContent galleryMediaContent = dataEditor.getGalleryPanel()
+                    .getGalleryMediaContent(lastSelection.getKey());
+            if (Objects.nonNull(galleryMediaContent)
+                    && MediaUtil.isAudioOrVideo(galleryMediaContent.getMediaViewMimeType())) {
+                mediaPartialDivisions.addAll(DataEditorService.getSortedAllowedSubstructuralElements(
+                        dataEditor.getRulesetManagement()
+                        .getStructuralElementView(lastSelection.getRight().getType(), dataEditor.getAcquisitionStage(),
+                                dataEditor.getPriorityList()), dataEditor.getProcess().getRuleset()));
+                Collection<String> mediaPartialDivisionIds = dataEditor.getRulesetManagement()
+                        .getFunctionalDivisions(FunctionalDivision.MEDIA_PARTIAL);
+                mediaPartialDivisions = mediaPartialDivisions.stream()
+                        .filter(selectItem -> selectItem.getValue() instanceof String)
+                        .filter(selectItem -> mediaPartialDivisionIds.contains((String) selectItem.getValue()))
+                        .collect(Collectors.toList());
+            }
         }
         return mediaPartialDivisions;
     }

@@ -21,25 +21,24 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.ForeignKey;
-import javax.persistence.JoinColumn;
-import javax.persistence.JoinTable;
-import javax.persistence.ManyToMany;
-import javax.persistence.ManyToOne;
-import javax.persistence.OneToMany;
-import javax.persistence.OrderBy;
-import javax.persistence.Table;
-import javax.persistence.Transient;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.hibernate.LazyInitializationException;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.search.mapper.pojo.automaticindexing.ReindexOnUpdate;
 import org.hibernate.search.mapper.pojo.mapping.definition.annotation.FullTextField;
 import org.hibernate.search.mapper.pojo.mapping.definition.annotation.Indexed;
@@ -70,9 +69,6 @@ public class Process extends BaseTemplateBean {
     @Column(name = "sortHelperDocstructs")
     private Integer sortHelperDocstructs;
 
-    @Column(name = "wikiField", columnDefinition = "longtext")
-    private String wikiField = "";
-
     @Column(name = "processBaseUri")
     private String processBaseUri;
 
@@ -95,11 +91,12 @@ public class Process extends BaseTemplateBean {
     @JoinColumn(name = "template_id", foreignKey = @ForeignKey(name = "FK_process_template_id"))
     private Template template;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id", foreignKey = @ForeignKey(name = "FK_process_parent_id"))
     private Process parent;
 
     @OneToMany(mappedBy = "parent", cascade = CascadeType.PERSIST, fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     private List<Process> children;
 
     @Transient
@@ -107,10 +104,11 @@ public class Process extends BaseTemplateBean {
 
     @OneToMany(mappedBy = "process", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("ordering")
+    @BatchSize(size = 50)
     private List<Task> tasks;
 
-    @LazyCollection(LazyCollectionOption.FALSE)
-    @OneToMany(mappedBy = "process", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "process", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @BatchSize(size = 50)
     private List<Comment> comments;
 
     @ManyToMany(cascade = CascadeType.ALL)
@@ -132,8 +130,8 @@ public class Process extends BaseTemplateBean {
                 @JoinColumn(name = "property_id", foreignKey = @ForeignKey(name = "FK_workpiece_x_property_property_id")) })
     private List<Property> workpieces;
 
-    @LazyCollection(LazyCollectionOption.FALSE)
-    @ManyToMany(mappedBy = "processes")
+    @ManyToMany(mappedBy = "processes", fetch = FetchType.EAGER)
+    @BatchSize(size = 50)
     private List<Batch> batches = new ArrayList<>();
 
     @Column(name = "exported")
@@ -282,28 +280,6 @@ public class Process extends BaseTemplateBean {
     }
 
     /**
-     * Returns the contents of the wiki field as HTML. Wiki means that something
-     * can be changed quickly by anyone. It is a kind of sticky note on which
-     * editors can exchange information about a process.
-     *
-     * @return wiki field as HTML
-     */
-    public String getWikiField() {
-        return this.wikiField;
-    }
-
-    /**
-     * Sets the content of the wiki field. Primitive HTML tags formatting may be
-     * used.
-     *
-     * @param wikiField
-     *            wiki field as HTML
-     */
-    public void setWikiField(String wikiField) {
-        this.wikiField = wikiField;
-    }
-
-    /**
      * Returns a process identifier URI. Internally, this is the record number
      * of the process in the processes table of the database, but for external
      * data it can also be another identifier that resolves to a directory in
@@ -432,6 +408,7 @@ public class Process extends BaseTemplateBean {
      * @return value of parent
      */
     public Process getParent() {
+        initialize(new ProcessDAO(), this.parent);
         return parent;
     }
 
@@ -775,77 +752,6 @@ public class Process extends BaseTemplateBean {
      */
     public void setOcrdWorkflowId(String ocrdWorkflowId) {
         this.ocrdWorkflowId = ocrdWorkflowId;
-    }
-
-    /**
-     * Returns the percentage of tasks in the process that are completed. The
-     * total of tasks awaiting preconditions, startable, in progress, and
-     * completed is {@code 100.0d}.
-     *
-     * @return percentage of tasks completed
-     */
-    public Double getProgressClosed() {
-        if (CollectionUtils.isEmpty(tasks) && !hasChildren()) {
-            return 0.0;
-        }
-        return getTaskProgress(MAX_AGE_NANOSS).get(TaskStatus.DONE);
-    }
-
-    /**
-     * Returns the percentage of tasks in the process that are currently being
-     * processed. The progress total of tasks waiting for preconditions,
-     * startable, in progress, and completed is {@code 100.0d}.
-     *
-     * @return percentage of tasks in progress
-     */
-    public Double getProgressInProcessing() {
-        if (CollectionUtils.isEmpty(tasks) && !hasChildren()) {
-            return 0.0;
-        }
-        return getTaskProgress(MAX_AGE_NANOSS).get(TaskStatus.INWORK);
-    }
-
-    /**
-     * Returns the percentage of the process's tasks that are now ready to be
-     * processed but have not yet been started. The progress total of tasks
-     * waiting for preconditions, startable, in progress, and completed is
-     * {@code 100.0d}.
-     *
-     * @return percentage of startable tasks
-     */
-    public Double getProgressOpen() {
-        if (CollectionUtils.isEmpty(tasks) && !hasChildren()) {
-            return 0.0;
-        }
-        return getTaskProgress(MAX_AGE_NANOSS).get(TaskStatus.OPEN);
-    }
-
-    private Map<TaskStatus, Double> getTaskProgress(long maxAgeNanos) {
-        long now = System.nanoTime();
-        if (Objects.isNull(this.taskProgress) || now - taskProgress.getLeft() > maxAgeNanos) {
-            Map<TaskStatus, Double> taskProgress = ProcessConverter.getTaskProgressPercentageOfProcess(this, true);
-            this.taskProgress = Pair.of(System.nanoTime(), taskProgress);
-        } else {
-            this.taskProgress = Pair.of(now, taskProgress.getValue());
-        }
-        Map<TaskStatus, Double> value = taskProgress.getValue();
-        return value;
-    }
-
-    /**
-     * Returns a coded overview of the progress of the process. The larger the
-     * number, the more advanced the process is, so it can be used to sort by
-     * progress. The numeric code consists of twelve digits, each three digits
-     * from 000 to 100 indicate the percentage of tasks completed, currently in
-     * progress, ready to start and not yet ready, in that order. For example,
-     * 000000025075 means that 25% of the tasks are ready to be started and 75%
-     * of the tasks are not yet ready to be started because previous tasks have
-     * not yet been processed.
-     * 
-     * @return overview of the processing status
-     */
-    public String getProgressCombined() {
-        return ProcessConverter.getCombinedProgressFromTaskPercentages(getTaskProgress(MAX_AGE_NANOSS));
     }
 
     /**

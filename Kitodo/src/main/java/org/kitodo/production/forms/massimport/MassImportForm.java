@@ -23,8 +23,8 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -117,21 +117,23 @@ public class MassImportForm extends BaseForm {
      */
     public void handleFileUpload(FileUploadEvent event) {
         file = event.getFile();
-        try {
-            List<String> csvLines = massImportService.getLines(file);
-            resetValues();
-            if (!csvLines.isEmpty()) {
-                importedCsvHeaderLine = csvLines.get(0);
-                csvSeparator = ServiceManager.getMassImportService().guessCsvSeparator(csvLines);
-                updateMetadataKeys();
-                if (csvLines.size() > 1) {
-                    importedCsvLines = csvLines.subList(1, csvLines.size());
-                    parseCsvLines();
+        if (Objects.nonNull(file)) {
+            try {
+                List<String> csvLines = massImportService.getLines(file);
+                resetValues();
+                if (!csvLines.isEmpty()) {
+                    importedCsvHeaderLine = csvLines.getFirst();
+                    csvSeparator = ServiceManager.getMassImportService().guessCsvSeparator(csvLines);
+                    updateMetadataKeys();
+                    if (csvLines.size() > 1) {
+                        importedCsvLines = csvLines.subList(1, csvLines.size());
+                        parseCsvLines();
+                    }
                 }
+            } catch (IOException | CsvException | KitodoCsvImportException e) {
+                Helper.setErrorMessage(e);
+                records = new LinkedList<>();
             }
-        } catch (IOException | CsvException | KitodoCsvImportException e) {
-            Helper.setErrorMessage(e);
-            records = new LinkedList<>();
         }
     }
 
@@ -160,8 +162,8 @@ public class MassImportForm extends BaseForm {
             updateMetadataKeys();
             records = massImportService.parseLines(importedCsvLines, csvSeparator.getSeparator());
             boolean success = true;
-            if (!records.isEmpty() && !records.get(0).getCsvCells().isEmpty()
-                    && records.get(0).getCsvCells().size() != metadataKeys.size()) {
+            if (!records.isEmpty() && !records.getFirst().getCsvCells().isEmpty()
+                    && records.getFirst().getCsvCells().size() != metadataKeys.size()) {
                 Helper.setErrorMessage(Helper.getTranslation("massImport.separatorCountMismatchHeader", csvSeparator.toString()));
                 records = new LinkedList<>();
                 success = false;
@@ -326,8 +328,8 @@ public class MassImportForm extends BaseForm {
         if (columnIndex < metadataKeys.size()) {
             String metadataKey = metadataKeys.get(columnIndex);
             try {
-                return ServiceManager.getImportService().getMetadataTranslation(addMetadataDialog.getRulesetManagement(), metadataKey,
-                        metadataGroupEntrySeparator);
+                return ServiceManager.getRulesetService().getMetadataTranslation(addMetadataDialog.getRulesetManagement(), metadataKey,
+                        metadataGroupEntrySeparator.getSeparator());
             } catch (IOException e) {
                 Helper.setErrorMessage(e);
                 return metadataKey;
@@ -624,7 +626,7 @@ public class MassImportForm extends BaseForm {
             return false;
         } else {
             return ServiceManager.getImportService().isRecordIdentifierMetadata(addMetadataDialog.getRulesetManagement(),
-                    metadataKeys.iterator().next());
+                    metadataKeys.getFirst());
         }
     }
 
@@ -637,7 +639,7 @@ public class MassImportForm extends BaseForm {
             return false;
         } else {
             return ServiceManager.getImportService().isDocTypeMetadata(addMetadataDialog.getRulesetManagement(),
-                    metadataKeys.iterator().next());
+                    metadataKeys.getFirst());
         }
     }
 

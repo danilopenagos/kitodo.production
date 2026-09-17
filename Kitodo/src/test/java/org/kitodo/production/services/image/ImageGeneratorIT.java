@@ -43,6 +43,7 @@ public class ImageGeneratorIT {
 
     private static final String MESSAGE_CHANGED = " was changed but should not have";
     private static final String MESSAGE_NOT_CHANGED = " was not changed but should have";
+    private static final String VARIABLE_REPLACER = "variableReplacer";
 
     // Test data
     private Path tiff = Paths.get("../Kitodo-LongTermPreservationValidation/src/test/resources/rose.tif");
@@ -201,13 +202,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpgsMaxFolder);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.ALL, outputs);
 
@@ -242,13 +243,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpgsMaxFolder);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.MISSING, outputs);
 
@@ -283,13 +284,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpgsMaxFolder);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.MISSING_OR_DAMAGED, outputs);
 
@@ -322,13 +323,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpegPathMixed);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.ALL, outputs);
 
@@ -363,13 +364,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpegPathMixed);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.MISSING, outputs);
 
@@ -404,13 +405,13 @@ public class ImageGeneratorIT {
         source.setMimeType(tiffType);
         Subfolder sourceFolder = new Subfolder(process, source);
         VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
-        setField(sourceFolder, "variableReplacer", variableReplacer);
+        setField(sourceFolder, VARIABLE_REPLACER, variableReplacer);
         Folder output = new Folder();
         output.setPath(jpegPathMixed);
         output.setMimeType(jpegType);
         output.setDerivative(1.0);
         Subfolder outputFolder = new Subfolder(process, output);
-        setField(outputFolder, "variableReplacer", variableReplacer);
+        setField(outputFolder, VARIABLE_REPLACER, variableReplacer);
         Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
         ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.MISSING_OR_DAMAGED, outputs);
 
@@ -423,5 +424,42 @@ public class ImageGeneratorIT {
         assertEquals(resultFileOneBefore, lastModifiedTime(mixedResultOne), mixedResultOne + MESSAGE_CHANGED);
         assertNotEquals(resultFileTwoBefore, lastModifiedTime(mixedResultTwo), mixedResultTwo + MESSAGE_NOT_CHANGED);
         assertNotEquals(resultFileThreeBefore, lastModifiedTime(mixedResultThree), mixedResultThree + MESSAGE_NOT_CHANGED);
+    }
+
+    /**
+     * Verifies that the configured source folder is ignored when it is also
+     * supplied as an output folder.
+     */
+    @Test
+    public void testSourceFolderIsNotRegenerated() throws Exception {
+        Process process = new Process();
+        process.setId(processId);
+        process.setTitle(processTitle);
+
+        Folder folder = new Folder();
+        folder.setPath(tiffFolder);
+        folder.setMimeType(tiffType);
+        folder.setDerivative(1.0);
+
+        Subfolder sourceFolder = new Subfolder(process, folder);
+        VariableReplacer variableReplacer = new MockVariableReplacer(processTitle);
+        setField(sourceFolder, "variableReplacer", variableReplacer);
+
+        Subfolder outputFolder = new Subfolder(process, folder);
+        setField(outputFolder, "variableReplacer", variableReplacer);
+
+        Collection<Subfolder> outputs = Collections.singletonList(outputFolder);
+        // Intentionally use the same Folder configuration for source and output.
+        ImageGenerator imageGenerator = new ImageGenerator(sourceFolder, GenerationMode.ALL, outputs);
+
+        Optional<FileTime> inputFileOneBefore = lastModifiedTime(inputFileOne);
+        Optional<FileTime> inputFileTwoBefore = lastModifiedTime(inputFileTwo);
+        Optional<FileTime> inputFileThreeBefore = lastModifiedTime(inputFileThree);
+
+        imageGenerator.run();
+
+        assertEquals(inputFileOneBefore, lastModifiedTime(inputFileOne), inputFileOne + MESSAGE_CHANGED);
+        assertEquals(inputFileTwoBefore, lastModifiedTime(inputFileTwo), inputFileTwo + MESSAGE_CHANGED);
+        assertEquals(inputFileThreeBefore, lastModifiedTime(inputFileThree), inputFileThree + MESSAGE_CHANGED);
     }
 }

@@ -28,13 +28,14 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.xml.bind.JAXBContext;
-import javax.xml.bind.JAXBException;
-import javax.xml.bind.Marshaller;
-import javax.xml.bind.Unmarshaller;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.datatype.DatatypeFactory;
 import javax.xml.datatype.XMLGregorianCalendar;
+
+import jakarta.xml.bind.JAXBContext;
+import jakarta.xml.bind.JAXBException;
+import jakarta.xml.bind.Marshaller;
+import jakarta.xml.bind.Unmarshaller;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
@@ -57,6 +58,7 @@ import org.kitodo.dataformat.metskitodo.MetsType.MetsHdr.MetsDocumentID;
 import org.kitodo.dataformat.metskitodo.MetsType.StructLink;
 import org.kitodo.dataformat.metskitodo.StructLinkType.SmLink;
 import org.kitodo.dataformat.metskitodo.StructMapType;
+import org.kitodo.utils.Guard;
 import org.kitodo.utils.JAXBContextCache;
 
 /**
@@ -130,8 +132,9 @@ public class MetsXmlElementAccess implements MetsXmlElementAccessInterface {
         }
         workpiece.setLogicalStructure(getStructMapsStreamByType(mets, "LOGICAL")
                 .map(structMap -> new DivXmlElementAccess(structMap.getDiv(), mets, physicalDivisionsMap, 1))
-                .collect(Collectors.toList())
-                .iterator().next());
+                .findFirst()
+                .orElseThrow()
+        );
     }
 
     private Map<String, FileXmlElementAccess> getReferenceDivIdsToPhysicalDivisions(Mets mets) {
@@ -272,7 +275,12 @@ public class MetsXmlElementAccess implements MetsXmlElementAccessInterface {
         mets.setMetsHdr(generateMetsHdr());
 
         Map<URI, FileType> mediaFilesToIDFiles = new HashMap<>();
-        mets.setFileSec(generateFileSec(mediaFilesToIDFiles));
+        FileSec fileSec = generateFileSec(mediaFilesToIDFiles);
+
+        // Omit empty fileSecs as they are not valid in METS
+        if (!fileSec.getFileGrp().isEmpty()) {
+            mets.setFileSec(fileSec);
+        }
 
         Map<PhysicalDivision, String> physicalDivisionIDs = new HashMap<>();
         mets.getStructMap().add(generatePhysicalStructMap(mediaFilesToIDFiles, physicalDivisionIDs, mets));
@@ -283,7 +291,10 @@ public class MetsXmlElementAccess implements MetsXmlElementAccessInterface {
         logical.setDiv(new DivXmlElementAccess(workpiece.getLogicalStructure()).toDiv(physicalDivisionIDs, smLinkData, mets));
         mets.getStructMap().add(logical);
 
-        mets.setStructLink(createStructLink(smLinkData));
+        // Omit empty structLinks as they are not valid in METS
+        if (!smLinkData.isEmpty()) {
+            mets.setStructLink(createStructLink(smLinkData));
+        }
         return mets;
     }
 
@@ -431,12 +442,8 @@ public class MetsXmlElementAccess implements MetsXmlElementAccessInterface {
         StructLink structLink = new StructLink();
         List<Object> content = structLink.getSmLinkOrSmLinkGrp();
         for (Pair<String, String> link : smLinkData) {
-            if (Objects.isNull(link.getLeft())) {
-                throw new IllegalArgumentException("link.left must not be null");
-            }
-            if (Objects.isNull(link.getRight())) {
-                throw new IllegalArgumentException("link.right must not be null");
-            }
+            Guard.isNotNull("link.left", link.getLeft());
+            Guard.isNotNull("link.right", link.getRight());
             SmLink smLink = new SmLink();
             smLink.setFrom(link.getLeft());
             smLink.setTo(link.getRight());

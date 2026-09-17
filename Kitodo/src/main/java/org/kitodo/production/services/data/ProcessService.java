@@ -16,13 +16,7 @@ import static org.kitodo.data.database.enums.CorrectionComments.NO_CORRECTION_CO
 import static org.kitodo.data.database.enums.CorrectionComments.NO_OPEN_CORRECTION_COMMENTS;
 import static org.kitodo.data.database.enums.CorrectionComments.OPEN_CORRECTION_COMMENTS;
 
-import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
-import com.itextpdf.text.PageSize;
-import com.itextpdf.text.Paragraph;
-import com.itextpdf.text.Rectangle;
-import com.itextpdf.text.pdf.PdfPTable;
-import com.itextpdf.text.pdf.PdfWriter;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -44,6 +38,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -59,8 +54,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.faces.context.ExternalContext;
-import javax.faces.context.FacesContext;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -69,6 +62,9 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 
+import jakarta.faces.context.ExternalContext;
+import jakarta.faces.context.FacesContext;
+
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -76,11 +72,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.DataFormatter;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.kitodo.api.dataeditor.rulesetmanagement.FunctionalDivision;
@@ -112,8 +103,12 @@ import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.data.database.persistence.BaseDAO;
 import org.kitodo.data.database.persistence.ProcessDAO;
 import org.kitodo.exceptions.ConfigurationException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.InvalidImagesException;
 import org.kitodo.export.ExportMets;
+import org.kitodo.production.dto.ProcessExportDTO;
+import org.kitodo.production.enums.ExportFormat;
+import org.kitodo.production.enums.ProcessState;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.helper.SearchResultGeneration;
 import org.kitodo.production.helper.WebDav;
@@ -147,11 +142,12 @@ import org.xml.sax.SAXException;
 public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
 
     private static final Map<String, String> SORT_FIELD_MAPPING;
+    private static final String FIELD_ID = "id";
 
     static {
         SORT_FIELD_MAPPING = new HashMap<>();
         SORT_FIELD_MAPPING.put("id", "id");
-        SORT_FIELD_MAPPING.put("title.keyword", "title");
+        SORT_FIELD_MAPPING.put("title", "title");
         SORT_FIELD_MAPPING.put("progressCombined", "sortHelperStatus");
         SORT_FIELD_MAPPING.put("lastEditingUser", "lastTask.processingUser.surname");
         SORT_FIELD_MAPPING.put("processingBeginLastTask", "lastTask.processingBegin");
@@ -160,7 +156,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
                 + " comment.process = process AND comment.type = 'ERROR' AND comment.corrected = false) > 0 THEN 2 WHEN"
                 + " (SELECT COUNT(comment) FROM Comment comment WHERE comment.process = process AND comment.type = "
                 + "'ERROR') > 0 THEN 1 ELSE 0 END");
-        SORT_FIELD_MAPPING.put("project.title.keyword", "project.title");
+        SORT_FIELD_MAPPING.put("project.title", "project.title");
         SORT_FIELD_MAPPING.put("creationDate", "creationDate");
     }
 
@@ -173,7 +169,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     private static final String PROCESS_TITLE = "(processtitle)";
     private static final String METADATA_FILE_NAME = "meta.xml";
     private static final String NEW_LINE_ENTITY = "\n";
-    private static final Pattern TYPE_PATTERN = Pattern.compile("structMap TYPE=\"LOGICAL\">.*?TYPE=\"([^\"]+)\"");
+    private static final Pattern TYPE_PATTERN = Pattern.compile("structMap TYPE=\"LOGICAL\">.*?TYPE=\"([^\"]+)\"", Pattern.DOTALL);
     private static final boolean USE_ORIG_FOLDER = ConfigCore
             .getBooleanParameterOrDefaultValue(ParameterCore.USE_ORIG_FOLDER);
     private static final Map<Integer, Collection<String>> RULESET_CACHE_FOR_CREATE_FROM_CALENDAR = new HashMap<>();
@@ -299,10 +295,18 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         if (!showClosedProcesses) {
             query.restrictToNotCompletedProcesses();
         }
-        Collection<Integer> projectIDs = ServiceManager.getUserService().getCurrentUser().getProjects().stream().filter(
-            project -> showInactiveProjects || project.isActive()).map(Project::getId).collect(Collectors.toList());
+        Collection<Integer> projectIDs = ServiceManager.getUserService()
+                .getCurrentUser()
+                .getProjects().stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
+
         query.restrictToProjects(projectIDs);
-        query.performIndexSearches();
+
+        if (!showInactiveProjects) {
+            query.addBooleanRestriction("project.active", Boolean.TRUE);
+        }
+        query.applyIndexRestriction(FIELD_ID);
         return query;
     }
 
@@ -477,7 +481,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         query.restrictWithUserFilterString(metadata.entrySet().stream().map(entry -> '"' + entry.getKey() + ':' + entry
                 .getValue() + '"').collect(Collectors.joining(" ")));
         query.setUnordered();
-        query.performIndexSearches();
+        query.applyIndexRestriction(FIELD_ID);
         return getByQuery(query.formQueryForAll(), query.getQueryParameters());
     }
 
@@ -508,7 +512,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         query.restrictWithUserFilterString(metadata.entrySet().stream().map(entry -> '"' + entry.getKey() + ':' + entry
                 .getValue() + '"').collect(Collectors.joining(" ")));
         query.setUnordered();
-        query.performIndexSearches();
+        query.applyIndexRestriction(FIELD_ID);
         return getByQuery(query.formQueryForAll(), query.getQueryParameters());
     }
 
@@ -533,7 +537,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     /**
      * Determines all processes with a specific docket.
      *
-     * <!-- Used in DocketForm to find out whether a docket is used in a
+     * <!-- Used in DocketListView to find out whether a docket is used in a
      * process. (Then it may not be deleted.) Is only checked for isEmpty(). -->
      *
      * @param docketId
@@ -550,7 +554,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     /**
      * Determines all processes with a specific ruleset.
      *
-     * <!-- Used in RulesetForm to find out whether a ruleset is used in a
+     * <!-- Used in RulesetListView to find out whether a ruleset is used in a
      * process. (Then it may not be deleted.) Is only checked for isEmpty(). -->
      *
      * @param rulesetId
@@ -673,7 +677,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
                 .filter(project -> showInactiveProjects || project.isActive()).map(Project::getId)
                 .collect(Collectors.toList());
         query.restrictToProjects(projectIDs);
-        query.performIndexSearches();
+        query.applyIndexRestriction(FIELD_ID);
         return getByQuery(query.formQueryForAll(), query.getQueryParameters());
     }
 
@@ -920,6 +924,17 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     }
 
     /**
+     * Updates the sort helper status of the process with the given ID directly in the database.
+     *
+     * @param processId ID of the process to update
+     * @param sortHelperStatus new sort helper status, may be {@code null}
+     */
+    public void updateSortHelperStatus(Integer processId, String sortHelperStatus)
+        throws DAOException {
+        dao.updateSortHelperStatus(processId, sortHelperStatus);
+    }
+
+    /**
      * Create and return String used as progress tooltip for a given process. Tooltip contains OPEN tasks and tasks
      * INWORK.
      *
@@ -972,8 +987,15 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      * @param process
      *            object
      * @return filer format
+     * @throws IOException
+     *            when retrieving metadata file type fails
+     * @throws SAXException
+     *            when schema definition for metadata file validation contains invalid XML syntax
+     * @throws FileStructureValidationException
+     *            when validating the metadata file fails
      */
-    public LegacyMetsModsDigitalDocumentHelper readMetadataFile(Process process) throws IOException {
+    public LegacyMetsModsDigitalDocumentHelper readMetadataFile(Process process) throws IOException, SAXException,
+            FileStructureValidationException {
         URI metadataFileUri = ServiceManager.getFileService().getMetadataFilePath(process);
 
         // check the format of the metadata - METS, XStream or RDF
@@ -983,7 +1005,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         LegacyMetsModsDigitalDocumentHelper ff = determineFileFormat(type, process);
         try {
             ff.read(ServiceManager.getFileService().getFile(metadataFileUri).toString());
-        } catch (IOException e) {
+        } catch (IOException | SAXException e) {
             if (e.getMessage().startsWith("Parse error at line -1")) {
                 Helper.setErrorMessage("metadataCorrupt", logger, e);
             } else {
@@ -1001,9 +1023,15 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      * @param prefs
      *            The Preferences
      * @return The fileFormat.
+     * @throws IOException
+     *            when retrieving metadata file type fails
+     * @throws SAXException
+     *            when schema definition for metadata file validation contains invalid XML syntax
+     * @throws FileStructureValidationException
+     *            when validating the metadata file fails
      */
     public LegacyMetsModsDigitalDocumentHelper readMetadataFile(URI metadataFile, LegacyPrefsHelper prefs)
-            throws IOException {
+            throws IOException, SAXException, FileStructureValidationException {
         String type = MetadataHelper.getMetaFileType(metadataFile);
         LegacyMetsModsDigitalDocumentHelper fileFormat = determineFileFormat(type, prefs);
         fileFormat.read(ConfigCore.getKitodoDataDirectory() + metadataFile.getPath());
@@ -1032,8 +1060,15 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      * @param process
      *            object
      * @return file format
+     * @throws IOException
+     *            when retrieving metadata file type fails
+     * @throws SAXException
+     *            when schema definition for metadata file validation contains invalid XML syntax
+     * @throws FileStructureValidationException
+     *            when validating the metadata file fails
      */
-    public LegacyMetsModsDigitalDocumentHelper readMetadataAsTemplateFile(Process process) throws IOException {
+    public LegacyMetsModsDigitalDocumentHelper readMetadataAsTemplateFile(Process process) throws IOException, SAXException,
+            FileStructureValidationException {
         URI processSubTypeURI = fileService.getProcessSubTypeURI(process, ProcessSubType.TEMPLATE, null);
         if (fileService.fileExist(processSubTypeURI)) {
             String type = MetadataHelper.getMetaFileType(processSubTypeURI);
@@ -1131,70 +1166,54 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     }
 
     /**
-     * Generate result as PDF.
-     *
+     * Exports selected processes matching the given filter to the specified format
+     * (CSV, Excel, or PDF) and writes the result to the HTTP response.
+     * Selection is controlled via allSelected, selectedProcessIds, and excludedProcessIds.
      * @param filter
-     *            for generating search results
+     *            optional user-defined filter string used to restrict processes
+     * @param showClosedProcesses
+     *            whether completed processes should be included in the export
+     * @param showInactiveProjects
+     *            whether processes from inactive projects should be included
+     * @param format
+     *            export format (CSV, Excel, or PDF)
+     * @param allSelected
+     *            true if all matching processes are selected,
+     *            false if only explicitly selected processes are exported
+     * @param selectedProcessIds
+     *            IDs of processes explicitly selected
+     * @param excludedProcessIds
+     *            IDs of processes explicitly excluded
      */
-    public void generateResultAsPdf(String filter, boolean showClosedProcesses, boolean showInactiveProjects)
-            throws DocumentException, IOException {
+    public void export(String filter, boolean showClosedProcesses, boolean showInactiveProjects, ExportFormat format,
+                       boolean allSelected, Collection<Integer> selectedProcessIds, Collection<Integer> excludedProcessIds)
+            throws IOException, DocumentException {
         FacesContext facesContext = FacesContext.getCurrentInstance();
         if (!facesContext.getResponseComplete()) {
-            ExternalContext response = prepareHeaderInformation(facesContext, "search.pdf");
-            try (OutputStream out = response.getResponseOutputStream()) {
-                SearchResultGeneration sr = new SearchResultGeneration(filter, showClosedProcesses,
-                        showInactiveProjects);
-                SXSSFWorkbook wb = sr.getResult();
-                List<List<Cell>> rowList = new ArrayList<>();
-                Sheet mySheet = wb.getSheetAt(0);
-                Iterator<Row> rowIter = mySheet.rowIterator();
-                while (rowIter.hasNext()) {
-                    Row myRow = (Row) rowIter.next();
-                    Iterator<Cell> cellIter = myRow.cellIterator();
-                    List<Cell> row = new ArrayList<>();
-                    while (cellIter.hasNext()) {
-                        Cell myCell = (Cell) cellIter.next();
-                        row.add(myCell);
-                    }
-                    rowList.add(row);
-                }
-                Document document = new Document();
-                Rectangle rectangle = new Rectangle(PageSize.A3.getHeight(), PageSize.A3.getWidth());
-                PdfWriter.getInstance(document, out);
-                document.setPageSize(rectangle);
-                document.open();
-                if (!rowList.isEmpty()) {
-                    Paragraph paragraph = new Paragraph(rowList.get(0).get(0).toString());
-                    document.add(paragraph);
-                    document.add(getPdfTable(rowList));
-                }
-
-                document.close();
-                wb.close();
-                facesContext.responseComplete();
+            List<ProcessExportDTO> results =
+                    getProcessesForExport(
+                            filter,
+                            showClosedProcesses,
+                            showInactiveProjects,
+                            ServiceManager.getUserService().getSessionClientId(),
+                            allSelected,
+                            selectedProcessIds,
+                            excludedProcessIds
+                    );
+            if (results.isEmpty()) {
+                return;
             }
-        }
-    }
-
-    /**
-     * Generate result set.
-     *
-     * @param filter
-     *            for generating search results
-     */
-    public void generateResult(String filter, boolean showClosedProcesses, boolean showInactiveProjects)
-            throws IOException {
-        FacesContext facesContext = FacesContext.getCurrentInstance();
-        if (!facesContext.getResponseComplete()) {
-            ExternalContext response = prepareHeaderInformation(facesContext, "search.xlsx");
+            ExternalContext response = prepareHeaderInformation(facesContext, format.getFilename());
             try (OutputStream out = response.getResponseOutputStream()) {
-                SearchResultGeneration sr = new SearchResultGeneration(filter, showClosedProcesses,
-                        showInactiveProjects);
-                SXSSFWorkbook wb = sr.getResult();
-                wb.write(out);
-                wb.close();
-                out.flush();
+                SearchResultGeneration sr = new SearchResultGeneration(results, filter);
+                switch (format) {
+                    case CSV -> sr.writeCsv(out);
+                    case EXCEL -> sr.writeExcel(out);
+                    case PDF -> sr.writePdf(out);
+                    default -> throw new IllegalArgumentException("Unsupported export format: " + format);
+                }
                 facesContext.responseComplete();
+                out.flush();
             }
         }
     }
@@ -1233,23 +1252,6 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         return externalContext;
     }
 
-    private PdfPTable getPdfTable(List<List<Cell>> rowList) throws DocumentException {
-        // create formatter for cells with default locale
-        DataFormatter formatter = new DataFormatter();
-
-        PdfPTable table = new PdfPTable(8);
-        table.setSpacingBefore(20);
-        table.setWidths(new int[] {4, 1, 2, 1, 1, 1, 2, 2 });
-        for (List<Cell> row : rowList) {
-            for (Cell hssfCell : row) {
-                String stringCellValue = formatter.formatCellValue(hssfCell);
-                table.addCell(stringCellValue);
-            }
-        }
-
-        return table;
-    }
-
     private static DocketInterface initialiseDocketModule() {
         KitodoServiceLoader<DocketInterface> loader = new KitodoServiceLoader<>(DocketInterface.class);
         return loader.loadModule();
@@ -1262,8 +1264,13 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      * @throws IOException
      *             if creating the process directory or reading the meta data file
      *             fails
+     * @throws SAXException
+     *            when schema definition for metadata file validation contains invalid XML syntax
+     * @throws FileStructureValidationException
+     *            when validating the metadata file fails
      */
-    public LegacyMetsModsDigitalDocumentHelper getDigitalDocument(Process process) throws IOException {
+    public LegacyMetsModsDigitalDocumentHelper getDigitalDocument(Process process) throws IOException, SAXException,
+            FileStructureValidationException {
         return readMetadataFile(process).getDigitalDocument();
     }
 
@@ -1279,7 +1286,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
         try {
             URI metadataFilePath = ServiceManager.getFileService().getMetadataFilePath(process);
             return ServiceManager.getMetsService().getBaseType(metadataFilePath);
-        } catch (IOException | IllegalArgumentException e) {
+        } catch (IOException | IllegalArgumentException | SAXException | FileStructureValidationException e) {
             logger.info("Could not determine base type for process {}: {}", process, e.getMessage());
             return "";
         }
@@ -1782,7 +1789,7 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     public static List<Process> getAllParentProcesses(Process process) {
         List<Process> parents = new ArrayList<>();
         while (Objects.nonNull(process.getParent())) {
-            parents.add(0, process.getParent());
+            parents.addFirst(process.getParent());
             process = process.getParent();
         }
         return parents;
@@ -1798,10 +1805,53 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      *             when query to database fails
      */
     public int getNumberOfChildren(int processId) throws DAOException {
-        return Math.toIntExact(count("SELECT COUNT(*) FROM Process WHERE parent_id = " + processId));
+        return Math.toIntExact(count("SELECT COUNT(*) FROM Process WHERE parent.id = " + processId));
     }
 
-    public static void deleteProcess(int processID) throws DAOException, IOException {
+    /**
+     * Checks whether the given parent process has any child processes
+     * that are not in a completed state.
+     *
+     * @param parentProcess
+     *            the parent process whose child processes are being checked
+     * @return true if there is at least one incomplete child process,
+     *         false if all children are completed
+     */
+    public boolean hasIncompleteChildren(Process parentProcess) {
+        String hql = "FROM Process p WHERE p.parent = :parent "
+                + "AND (p.sortHelperStatus NOT IN (:completedStates) OR p.sortHelperStatus IS NULL)";
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("parent", parentProcess);
+        parameters.put("completedStates", List.of(
+                ProcessState.COMPLETED20.getValue(),
+                ProcessState.COMPLETED.getValue()
+        ));
+        try {
+            return dao.has(hql, parameters);
+        } catch (DAOException e) {
+            logger.error(e.getMessage(), e);
+            return true;
+        }
+    }
+
+    /**
+     * Delete process by ID.
+     *
+     * @param processID
+     *          ID of process to delete
+     * @throws DAOException
+     *          when loading or deleting process fails
+     * @throws IOException
+     *          when deleting process fails
+     * @throws SAXException
+     *          when an error occurs during XML validation of potential parent processes' workpiece during during removal
+     *          of process links due to schema invalid parent process metadata files
+     * @throws FileStructureValidationException
+     *          when deleting process fails during removal of process links from potential parent process due to schema invalid
+     *          parent process metadata files
+     */
+    public static void deleteProcess(int processID) throws DAOException, IOException, SAXException,
+            FileStructureValidationException {
         Process process = ServiceManager.getProcessService().getById(processID);
         deleteProcess(process);
     }
@@ -1809,9 +1859,21 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     /**
      * Delete given process.
      *
-     * @param processToDelete process to delete
+     * @param processToDelete
+     *          process to delete
+     * @throws DAOException
+     *          when updating or deleting process fails
+     * @throws IOException
+     *          when removing link to potential parent process fails
+     * @throws SAXException
+     *          when an error occurs during XML validation of potential parent processes' workpiece during during removal
+     *          of process links due to schema invalid parent process metadata files
+     * @throws FileStructureValidationException
+     *          when deleting process fails during removal of process links from potential parent process due to schema invalid
+     *          parent process metadata files
      */
-    public static void deleteProcess(Process processToDelete) throws DAOException, IOException {
+    public static void deleteProcess(Process processToDelete) throws DAOException, IOException, SAXException,
+            FileStructureValidationException {
         deleteMetadataDirectory(processToDelete);
 
         processToDelete.setProject(null);
@@ -1902,8 +1964,12 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      *             Thrown on index error
      * @throws IOException
      *             Thrown on I/O error
+     * @throws SAXException
+     *             When starting the export fails
+     * @throws FileStructureValidationException
+     *             when XML validation of process metadata file fails during export
      */
-    public static void exportMets(int processId) throws DAOException, IOException {
+    public static void exportMets(int processId) throws DAOException, IOException, SAXException, FileStructureValidationException {
         Process process = ServiceManager.getProcessService().getById(processId);
         ExportMets export = new ExportMets();
         export.startExport(process);
@@ -1934,15 +2000,17 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      */
     public static void downloadToHome(WebDav webDav, int processId) throws DAOException {
         Process process = ServiceManager.getProcessService().getById(processId);
-        if (ServiceManager.getProcessService().isImageFolderInUse(process)) {
-            Helper.setMessage(
-                    Helper.getTranslation("directory ") + " " + process.getTitle() + " "
-                            + Helper.getTranslation("isInUse"),
-                    ServiceManager.getUserService()
-                            .getFullName(ServiceManager.getProcessService().getImageFolderInUseUser(process)));
-            webDav.downloadToHome(process, true);
-        } else {
-            webDav.downloadToHome(process, false);
+        if (Objects.nonNull(process)) {
+            if (ServiceManager.getProcessService().isImageFolderInUse(process)) {
+                Helper.setMessage(
+                        Helper.getTranslation("directory ") + " " + process.getTitle() + " "
+                                + Helper.getTranslation("isInUse"),
+                        ServiceManager.getUserService()
+                                .getFullName(ServiceManager.getProcessService().getImageFolderInUseUser(process)));
+                webDav.downloadToHome(process, true);
+            } else {
+                webDav.downloadToHome(process, false);
+            }
         }
     }
 
@@ -1974,8 +2042,8 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     public static CorrectionComments hasCorrectionComment(int processID) throws DAOException {
         Process process = ServiceManager.getProcessService().getById(processID);
         List<Comment> correctionComments = ServiceManager.getCommentService().getAllCommentsByProcess(process)
-                .stream().filter(c -> CommentType.ERROR.equals(c.getType())).collect(Collectors.toList());
-        if (correctionComments.size() < 1) {
+                .stream().filter(c -> CommentType.ERROR.equals(c.getType())).toList();
+        if (correctionComments.isEmpty()) {
             return NO_CORRECTION_COMMENTS;
         } else if (correctionComments.stream().anyMatch(c -> !c.isCorrected())) {
             return OPEN_CORRECTION_COMMENTS;
@@ -2286,16 +2354,62 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
     }
 
     /**
+     * Finds all process IDs that have at least one child process.
+     *
+     * @param processIds process IDs to check
+     * @return IDs of processes that have children
+     */
+    public Set<Integer> findProcessIdsWithChildren(Collection<Integer> processIds) throws DAOException {
+        if (Objects.isNull(processIds) || processIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        String hql = "SELECT DISTINCT p.parent.id "
+                        + "FROM Process p "
+                        + "WHERE p.parent.id IN (:ids)";
+
+        Map<String, Object> parameters = Map.of("ids", processIds);
+        List<Object[]> rows = dao.getProjectionByQuery(hql, parameters);
+        return rows.stream()
+                .map(row -> (Integer) row[0])
+                .collect(Collectors.toSet());
+    }
+
+    /**
+     * Finds all process IDs that have at least one visible task
+     * for the given roles.
+     *
+     * @param processIds process IDs to check
+     * @param roleIds role IDs used to determine task visibility
+     * @return IDs of processes that have visible tasks
+     */
+    public Set<Integer> findProcessIdsWithVisibleTasks(
+            Collection<Integer> processIds,
+            Collection<Integer> roleIds) throws DAOException {
+        String hql =
+                "SELECT DISTINCT t.process.id "
+                        + "FROM Task t "
+                        + "JOIN t.roles r "
+                        + "WHERE t.process.id IN (:processIds) "
+                        + "AND t.processingStatus IN (:statuses) "
+                        + "AND r.id IN (:roleIds)";
+
+        Map<String, Object> params = Map.of(
+                "processIds", processIds,
+                "roleIds", roleIds,
+                "statuses", List.of(TaskStatus.OPEN, TaskStatus.INWORK)
+        );
+        List<Object[]> rows = dao.getProjectionByQuery(hql, params);
+        return rows.stream()
+                .map(row -> (Integer) row[0])
+                .collect(Collectors.toSet());
+    }
+
+    /**
      * Checks and returns whether the process with the given ID 'processId' can be exported or not.
-     * @param processId process ID
+     * @param process the process
      * @return whether process can be exported or not
      */
-    public static boolean canBeExported(int processId) throws IOException, DAOException {
-        Process process = ServiceManager.getProcessService().getById(processId);
-        // superordinate processes normally do not contain images but should always be exportable
-        if (!process.getChildren().isEmpty()) {
-            return true;
-        }
+    public static boolean canBeExported(Process process) throws DAOException {
         Folder generatorSource = process.getProject().getGeneratorSource();
         // processes without a generator source should be exportable because they may contain multimedia files
         // that are not used as generator sources
@@ -2332,14 +2446,16 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
      * @return name of ImportConfiguration
      * @throws DAOException when loading import configuration by ID or saving updated processes fails
      */
-    public String setImportConfigurationForMultipleProcesses(List<Process> processes, int configurationId)
-            throws DAOException {
-        ImportConfiguration configuration = ServiceManager.getImportConfigurationService().getById(configurationId);
-        for (Process process : processes) {
-            process.setImportConfiguration(configuration);
-            save(process);
-        }
-        return configuration.getTitle();
+    public String setImportConfigurationForMultipleProcesses(
+            List<Process> processes, int configurationId) throws DAOException {
+
+        ImportConfiguration importConfiguration =  ServiceManager.getImportConfigurationService().getById(configurationId);
+        dao.setImportConfigurationForProcesses(
+            processes.stream()
+                .map(Process::getId)
+                .toList(),
+            importConfiguration);
+        return importConfiguration.getTitle();
     }
 
     private int getNumberOfImagesForIndex(Workpiece workpiece) {
@@ -2369,15 +2485,113 @@ public class ProcessService extends BaseBeanService<Process, ProcessDAO> {
 
         URI metadataFileUri = ServiceManager.getProcessService().getMetadataFileUri(process);
         try {
-            Workpiece workpiece = ServiceManager.getMetsService().loadWorkpiece(metadataFileUri);
+            Workpiece workpiece = ServiceManager.getMetsService().loadWorkpiece(metadataFileUri, false);
             process.setSortHelperImages(getNumberOfImagesForIndex(workpiece));
             process.setSortHelperDocstructs(getNumberOfStructures(workpiece));
             process.setSortHelperMetadata(getNumberOfMetadata(workpiece));
             if (save) {
                 super.save(process);
             }
-        } catch (IOException e) {
+        } catch (IOException | SAXException | FileStructureValidationException e) {
             logger.debug("Could not load meta file {} for gathering meta information!", metadataFileUri.toString());
         }
+    }
+
+    /**
+     * Retrieves a list of processes prepared for export, applying the given filters.
+     * Instead of returning full entities, it projects the data into {@link ProcessExportDTO}
+     * objects suitable for use in reports or export (e.g., Excel, CSV).
+     *
+     * @param filter               optional user-defined filter string
+     * @param includeClosed         whether to include closed processes
+     * @param includeInactiveProjects whether to include inactive projects
+     * @param sessionClientId       client ID to restrict the query
+     * @param allSelected whether all matching processes are selected
+     * @param selectedProcessIds IDs of explicitly selected processes if not all are selected
+     * @param excludedProcessIds IDs of explicitly excluded processes if all are selected
+     * @return list of processes as export-ready DTOs
+     */
+    public List<ProcessExportDTO> getProcessesForExport(
+            String filter,
+            boolean includeClosed,
+            boolean includeInactiveProjects,
+            int sessionClientId,
+            boolean allSelected,
+            Collection<Integer> selectedProcessIds,
+            Collection<Integer> excludedProcessIds) {
+
+        if (!allSelected && (Objects.isNull(selectedProcessIds) || selectedProcessIds.isEmpty())) {
+            return Collections.emptyList();
+        }
+
+        BeanQuery query = createExportQuery(
+                filter,
+                includeClosed,
+                includeInactiveProjects,
+                sessionClientId,
+                allSelected,
+                selectedProcessIds,
+                excludedProcessIds
+        );
+
+        String hql = "SELECT process.id, process.title, process.creationDate, "
+                + "process.sortHelperImages, process.sortHelperDocstructs, process.sortHelperMetadata, "
+                + "proj.title, process.sortHelperStatus "
+                + query.formQueryWithoutSelect();
+
+        List<Object[]> rows = dao.getProjectionByQuery(hql, query.getQueryParameters());
+
+        List<ProcessExportDTO> result = new ArrayList<>(rows.size());
+        for (Object[] row : rows) {
+            result.add(new ProcessExportDTO(
+                    (Integer) row[0],        // id
+                    (String) row[1],         // title
+                    (Date) row[2],           // creationDate
+                    (Integer) row[3],        // sortHelperImages
+                    (Integer) row[4],        // sortHelperDocstructs
+                    (Integer) row[5],        // sortHelperMetadata
+                    (String) row[6],         // projectTitle
+                    (String) row[7]          // status
+            ));
+        }
+        return result;
+    }
+
+    private BeanQuery createExportQuery(
+            String filter,
+            boolean includeClosed,
+            boolean includeInactiveProjects,
+            int sessionClientId,
+            boolean allSelected,
+            Collection<Integer> selectedProcessIds,
+            Collection<Integer> excludedProcessIds) {
+
+        BeanQuery query = new BeanQuery(Process.class);
+
+        if (StringUtils.isNotBlank(filter)) {
+            query.restrictWithUserFilterString(filter);
+        }
+        if (!includeClosed) {
+            query.restrictToNotCompletedProcesses();
+        }
+        if (allSelected) {
+            if (Objects.nonNull(excludedProcessIds) && !excludedProcessIds.isEmpty()) {
+                query.addNotInCollectionRestriction("id", excludedProcessIds);
+            }
+        } else {
+            query.addInCollectionRestriction("id", selectedProcessIds);
+        }
+
+        query.restrictToClient(sessionClientId);
+
+        Collection<Integer> projectIDs = ServiceManager.getUserService().getCurrentUser().getProjects().stream()
+                .filter(project -> includeInactiveProjects || project.isActive()).map(project -> project.getId())
+                .collect(Collectors.toList());
+        query.restrictToProjects(projectIDs);
+        query.applyIndexRestriction(FIELD_ID);
+        query.addInnerJoin("project proj");
+        query.defineSorting("id", SortOrder.ASCENDING);
+
+        return query;
     }
 }

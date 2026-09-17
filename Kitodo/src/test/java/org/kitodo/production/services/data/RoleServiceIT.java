@@ -33,6 +33,7 @@ import org.kitodo.production.services.ServiceManager;
 public class RoleServiceIT {
 
     private static final RoleService roleService = ServiceManager.getRoleService();
+    private static final AuthorityService authorityService = ServiceManager.getAuthorityService();
 
     private static final int EXPECTED_ROLES_COUNT = 10;
 
@@ -81,7 +82,7 @@ public class RoleServiceIT {
         Role role = new Role();
         role.setTitle("To Remove");
         roleService.save(role);
-        Role foundRole = roleService.getByQuery("FROM Role WHERE title = 'To Remove'").get(0);
+        Role foundRole = roleService.getByQuery("FROM Role WHERE title = 'To Remove'").getFirst();
         assertEquals("To Remove", foundRole.getTitle(), "Additional user group was not inserted in database!");
 
         roleService.remove(foundRole);
@@ -91,7 +92,7 @@ public class RoleServiceIT {
         role = new Role();
         role.setTitle("To remove");
         roleService.save(role);
-        foundRole = roleService.getByQuery("FROM Role WHERE title = 'To remove'").get(0);
+        foundRole = roleService.getByQuery("FROM Role WHERE title = 'To remove'").getFirst();
         assertEquals("To remove", foundRole.getTitle(), "Additional user group was not inserted in database!");
 
         roleService.remove(foundRole.getId());
@@ -107,10 +108,10 @@ public class RoleServiceIT {
 
         Role role = new Role();
         role.setTitle("Cascados Group");
-        role.getUsers().add(userService.getByQuery("FROM User WHERE login = 'Cascados' ORDER BY id DESC").get(0));
+        role.getUsers().add(userService.getByQuery("FROM User WHERE login = 'Cascados' ORDER BY id DESC").getFirst());
         roleService.save(role);
 
-        Role foundRole = roleService.getByQuery("FROM Role WHERE title = 'Cascados Group'").get(0);
+        Role foundRole = roleService.getByQuery("FROM Role WHERE title = 'Cascados Group'").getFirst();
         assertEquals("Cascados Group", foundRole.getTitle(), "Additional user was not inserted in database!");
 
         roleService.remove(foundRole);
@@ -120,14 +121,14 @@ public class RoleServiceIT {
         size = userService.getByQuery("FROM User WHERE login = 'Cascados'").size();
         assertEquals(1, size, "User was removed from database!");
 
-        userService.remove(userService.getByQuery("FROM User WHERE login = 'Cascados'").get(0));
+        userService.remove(userService.getByQuery("FROM User WHERE login = 'Cascados'").getFirst());
     }
 
     @Test
     public void shouldGetAuthorizationsAsString() throws Exception {
-        Role role = roleService.getById(1);
+        Role role = roleService.getById(1); // admin role
         int actual = roleService.getAuthorizationsAsString(role).size();
-        int expected = 35;
+        long expected = authorityService.count(); // admin role should have all authorities
         assertEquals(expected, actual, "Number of authority strings doesn't match!");
     }
 

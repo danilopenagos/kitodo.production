@@ -19,9 +19,13 @@
         xmlns:p="http://primefaces.org/ui">
 
     <!--@elvariable id="id" type="java.lang.Integer"-->
+    <!--@elvariable id="referrerListOptions" type="java.lang.String"-->
+
     <f:metadata>
         <f:viewParam name="id"/>
         <f:viewAction action="#{LtpValidationConfigurationEditView.load(id)}"/>
+        <f:viewParam name="referrerListOptions"/>
+        <f:viewAction action="#{LtpValidationConfigurationEditView.setReferrerListOptionsFromTemplate(referrerListOptions)}"/>
     </f:metadata>
 
     <!--@elvariable id="isEditMode" type="boolean"-->
@@ -44,7 +48,7 @@
 
         <p:button id="cancel" value="#{msgs.cancel}"
                   onclick="setConfirmUnload(false);"
-                  outcome="projects?keepPagination=true"
+                  outcome="projects?tab=ltpValidationConfigurationsTab&amp;#{LtpValidationConfigurationEditView.referrerListOptions}"
                   icon="fa fa-times fa-lg"
                   iconPos="right"
                   styleClass="secondary"/>
@@ -74,7 +78,7 @@
                 <p:panelGrid id="ltpValidationConfiguration-grid"
                    columns="2"
                    layout="grid">
-                    <p:row>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="title"
                                             value="#{msgs.title} *"/>
@@ -91,8 +95,8 @@
                             <p:tooltip for="titleHelp"
                                         value="#{msgs['ltpValidation.edit.title.tooltip']}"/>
                         </div>
-                    </p:row>
-                    <p:row>
+                    </p:panel>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="mimeType"
                                             value="#{msgs['ltpValidation.edit.mimeType.label']}"/>
@@ -116,12 +120,12 @@
                                            value="#{msgs['ltpValidation.edit.mimeType.disabled.tooltip']}"/>
                             </div>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
 
                 <h4><h:outputText value="#{msgs['ltpValidation.edit.workflowOptions']}" /></h4>
                 <p:panelGrid columns="2" layout="grid">
-                    <p:row>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="requireNoErrorToFinishTask"
                                            value="#{msgs['ltpValidation.edit.requireNoErrorToFinishTask']}"/>
@@ -132,8 +136,8 @@
                                 <p:ajax event="change" oncomplete="toggleSave()"/>
                             </p:selectBooleanCheckbox>
                         </div>
-                    </p:row>
-                    <p:row>
+                    </p:panel>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="requireNoErrorToUploadImage"
                                            value="#{msgs['ltpValidation.edit.requireNoErrorToUploadImage']}"/>
@@ -144,12 +148,12 @@
                                 <p:ajax event="change" oncomplete="toggleSave()"/>
                             </p:selectBooleanCheckbox>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
 
                 <h4><h:outputText value="#{msgs['ltpValidation.edit.commonValidationConditions']}" /></h4>
                 <p:panelGrid columns="2" layout="grid">
-                    <p:row>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="simpleWellFormed"
                                             value="#{msgs['ltpValidation.edit.wellFormed.label']}"/>
@@ -187,8 +191,8 @@
                             <p:tooltip for="simpleFilenamePatternHelp"
                                         value="#{msgs['ltpValidation.edit.filenamePattern.tooltip']}"/>
                         </div>
-                    </p:row>
-                    <p:row>
+                    </p:panel>
+                    <p:panel>
                         <div>
                             <p:outputLabel for="simpleValid"
                                             value="#{msgs['ltpValidation.edit.valid.label']}"/>
@@ -227,7 +231,7 @@
                                            value="#{msgs['ltpValidation.edit.filenamePatternSeverity.tooltip']}"/>
                             </div>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
             </p:tab>
             <p:tab id="conditionsTab"
@@ -303,8 +307,8 @@
     </ui:define>
 
     <ui:define name="breadcrumbs">
-        <p:menuitem value="#{msgs.desktop}" url="desktop.jsf" icon="fa fa-home"/>
-        <p:menuitem value="#{msgs.projects}" url="projects.jsf" icon="fa fa-archive"/>
+        <p:menuitem value="#{msgs.desktop}" url="desktop" icon="fa fa-home"/>
+        <p:menuitem value="#{msgs.projects}" url="projects" icon="fa fa-archive"/>
         <p:menuitem value="#{msgs['ltpValidation.edit.mode.edit']}" rendered="#{isEditMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['ltpValidation.edit.mode.create']}" rendered="#{isCreateMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['ltpValidation.edit.mode.view']}" rendered="#{isViewMode}" icon="fa fa-cogs"/>

@@ -24,39 +24,39 @@ public class TemplateEditPage extends EditPage<TemplateEditPage> {
     private static final String TEMPLATE_TAB_VIEW = EDIT_FORM + ":templateTabView";
     private static final String CSS_SELECTOR_DROPDOWN_TRIGGER =  ".ui-selectonemenu-trigger";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW)
     private WebElement templateTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW + ":title")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW + ":workflow")
     private WebElement workflowSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW + ":ruleset")
     private WebElement rulesetSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW + ":docket")
     private WebElement docketSelect;
 
     @FindBy(id = "editForm:templateTabView:active")
     private WebElement activeSwitch;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TAB_VIEW + ":taskTable:0:editTask")
     private WebElement editTaskLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = EDIT_FORM + ":tabs:j_id_44:0:validator")
     private WebElement firstValidatorCheckbox;
 
     public TemplateEditPage() {
-        super("pages/templateEdit.jsf");
+        super("pages/templateEdit");
     }
 
     @Override
@@ -66,7 +66,7 @@ public class TemplateEditPage extends EditPage<TemplateEditPage> {
 
     public TemplateEditPage insertTemplateData(Template template) {
         titleInput.sendKeys(template.getTitle());
-        Browser.getDriver().findElements(By.className("ui-chkbox")).get(0).click();
+        Browser.getDriver().findElements(By.className("ui-chkbox")).getFirst().click();
         clickElement(workflowSelect.findElement(By.cssSelector(CSS_SELECTOR_DROPDOWN_TRIGGER)));
         clickElement(Browser.getDriver().findElement(By.id(workflowSelect.getAttribute("id") + "_0")));
 
@@ -92,11 +92,11 @@ public class TemplateEditPage extends EditPage<TemplateEditPage> {
         return this;
     }
 
-    public void saveTask()throws IllegalAccessException, InstantiationException {
+    public void saveTask() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getTemplateEditPage().getUrl());
     }
 
-    public ProjectsPage save() throws IllegalAccessException, InstantiationException {
+    public ProjectsPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getProjectsPage().getUrl());
         return Pages.getProjectsPage();
     }

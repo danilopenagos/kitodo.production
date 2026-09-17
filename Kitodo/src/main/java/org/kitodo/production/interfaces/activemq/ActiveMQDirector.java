@@ -16,13 +16,13 @@ import java.util.Collection;
 import java.util.Objects;
 import java.util.Optional;
 
-import javax.jms.Connection;
-import javax.jms.DeliveryMode;
-import javax.jms.Destination;
-import javax.jms.JMSException;
-import javax.jms.MessageConsumer;
-import javax.jms.MessageProducer;
-import javax.jms.Session;
+import jakarta.jms.Connection;
+import jakarta.jms.DeliveryMode;
+import jakarta.jms.Destination;
+import jakarta.jms.JMSException;
+import jakarta.jms.MessageConsumer;
+import jakarta.jms.MessageProducer;
+import jakarta.jms.Session;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.apache.activemq.ActiveMQSslConnectionFactory;
@@ -46,7 +46,7 @@ public class ActiveMQDirector implements Runnable {
     private static final Logger logger = LogManager.getLogger(ActiveMQDirector.class);
 
     // When implementing new services, add them to this list
-    private static Collection<ActiveMQProcessor> services;
+    private static final Collection<ActiveMQProcessor> services;
 
     static {
         services = Arrays.asList(new FinalizeStepProcessor(), new TaskActionProcessor(),
@@ -71,7 +71,7 @@ public class ActiveMQDirector implements Runnable {
     }
 
     private Connection getConnectionFromActiveMQSslFactory(String server) throws Exception {
-        logger.trace("Using the ActiveMQSslConnectionFactory to establish a connection to \"" + server + "\"");
+        logger.trace("Using the ActiveMQSslConnectionFactory to establish a connection to \"{}\"", server);
         ActiveMQSslConnectionFactory factory = new ActiveMQSslConnectionFactory(server);
         factory.setKeyStore(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_KEYSTORE));
         factory.setKeyStorePassword(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_KEYSTORE_PASSWORD));
@@ -79,7 +79,7 @@ public class ActiveMQDirector implements Runnable {
         factory.setTrustStorePassword(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_TRUSTSTORE_PASSWORD));
 
         if (ConfigCore.getBooleanParameter(ParameterCore.ACTIVE_MQ_USE_AUTH, false))  {
-            logger.trace("Using authentication on connection \"" + server + "\"");
+            logger.trace("Using authentication on connection \"{}\"", server);
             factory.setUserName(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_AUTH_USERNAME));
             factory.setPassword(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_AUTH_PASSWORD));
         }
@@ -88,11 +88,11 @@ public class ActiveMQDirector implements Runnable {
     }
 
     private Connection getConnectionFromActiveMQFactory(String server) throws JMSException {
-        logger.trace("Using the ActiveMQConnectionFactory to establish a connection to \"" + server + "\"");
+        logger.trace("Using the ActiveMQConnectionFactory to establish a connection to \"{}\"", server);
         ActiveMQConnectionFactory factory = new ActiveMQConnectionFactory(server);
 
         if (ConfigCore.getBooleanParameter(ParameterCore.ACTIVE_MQ_USE_AUTH, false))  {
-            logger.trace("Using authentication on connection \"" + server + "\"");
+            logger.trace("Using authentication on connection \"{}\"", server);
             factory.setUserName(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_AUTH_USERNAME));
             factory.setPassword(ConfigCore.getParameter(ParameterCore.ACTIVE_MQ_AUTH_PASSWORD));
         }
@@ -118,7 +118,7 @@ public class ActiveMQDirector implements Runnable {
             }
 
             connection.start();
-            connection.setExceptionListener(exception -> logger.error(exception));
+            connection.setExceptionListener(logger::error);
             return connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
         } catch (Exception e) {
             logger.fatal("Error connecting to ActiveMQ server, giving up.", e);

@@ -90,7 +90,7 @@ public class CatalogImportIT {
     public void shouldImportProcessHierarchy() throws Exception {
         LinkedList<TempProcess> processes = ServiceManager.getImportService().importProcessHierarchy(CHILD_RECORD_ID,
                 MockDatabase.getKalliopeImportConfiguration(), PROJECT_ID, TEMPLATE_ID, IMPORT_DEPTH,
-                Collections.singleton("CatalogIDPredecessorPeriodical"));
+                Collections.singleton("CatalogIDPredecessorPeriodical"), false);
         assertEquals(IMPORT_DEPTH, processes.size());
     }
 
@@ -105,9 +105,9 @@ public class CatalogImportIT {
         testProcess.setImportConfiguration(configuration);
         HashSet<Metadata> existingMetadata = workpiece.getLogicalStructure().getMetadata();
         List<MetadataComparison> metadataComparisons = DataEditorService.reimportCatalogMetadata(testProcess, workpiece,
-                existingMetadata, languages, "Monograph");
+                existingMetadata, languages, "Monograph", true);
         assertFalse(metadataComparisons.isEmpty(), "List of metadata comparisons should not be empty");
-        MetadataComparison firstComparison = metadataComparisons.get(0);
+        MetadataComparison firstComparison = metadataComparisons.getFirst();
         assertEquals(PUBLICATION_YEAR, firstComparison.getMetadataKey(),
                 String.format("Changed metadata should be '%s'", PUBLICATION_YEAR));
         MetadataEntry publicationYearOld = new MetadataEntry();

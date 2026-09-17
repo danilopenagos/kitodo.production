@@ -31,8 +31,9 @@ import java.util.stream.Collectors;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.enterprise.context.ApplicationScoped;
-import javax.inject.Named;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Named;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -177,7 +178,7 @@ public class MigrationForm extends BaseForm {
         List<Task> processTasks = process.getTasks();
         processTasks.sort(Comparator.comparingInt(Task::getOrdering));
         for (String tasks : aggregatedProcesses.keySet()) {
-            List<Task> aggregatedTasks = aggregatedProcesses.get(tasks).get(0).getTasks();
+            List<Task> aggregatedTasks = aggregatedProcesses.get(tasks).getFirst().getTasks();
             aggregatedTasks.sort(Comparator.comparingInt(Task::getOrdering));
             if (checkForTitle(tasks, processTasks) && migrationService
                     .tasksAreEqual(aggregatedTasks, processTasks)) {
@@ -318,7 +319,7 @@ public class MigrationForm extends BaseForm {
      */
     public String createNewWorkflow() {
 
-        Process blueprintProcess = aggregatedProcesses.get(currentTasks).get(0);
+        Process blueprintProcess = aggregatedProcesses.get(currentTasks).getFirst();
         TasksToWorkflowConverter templateConverter = new TasksToWorkflowConverter();
         List<Task> processTasks = blueprintProcess.getTasks();
         processTasks.sort(Comparator.comparingInt(Task::getOrdering));
@@ -594,7 +595,7 @@ public class MigrationForm extends BaseForm {
             }
         });
 
-        Helper.setMessage("All uncrypted LDAP Manager passwords were successfully encrypted.");
+        Helper.setMessage("All unencrypted LDAP Manager passwords were successfully encrypted.");
     }
 
     /**
@@ -648,7 +649,7 @@ public class MigrationForm extends BaseForm {
     }
 
     /**
-     * Start updating internal meta information in separat tasks.
+     * Start updating internal meta information in separate tasks.
      */
     public void startUpdateInternalMetaInformation() {
         for (Project project : selectedProjects) {

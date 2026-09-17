@@ -44,8 +44,10 @@ import org.kitodo.api.dataformat.View;
 import org.kitodo.api.dataformat.Workpiece;
 import org.kitodo.api.dataformat.mets.LinkedMetsResource;
 import org.kitodo.data.database.beans.Process;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.services.ServiceManager;
+import org.xml.sax.SAXException;
 
 /**
  * This class contains some methods to handle metadata (semi) automatically.
@@ -77,9 +79,14 @@ public class MetadataEditor {
      * @param childProcessId
      *            Database ID of the child process to be linked
      * @throws IOException
-     *             if the METS file cannot be read or written
+     *            when the METS file cannot be read or written
+     * @throws SAXException
+     *            when XML validation error occurs when loading the metadata file
+     * @throws FileStructureValidationException
+     *            when XML validation of metadata files fails
      */
-    public static void addLink(Process process, String insertionPosition, int childProcessId) throws IOException {
+    public static void addLink(Process process, String insertionPosition, int childProcessId) throws IOException,
+            SAXException, FileStructureValidationException {
         URI metadataFileUri = ServiceManager.getProcessService().getMetadataFileUri(process);
         Workpiece workpiece = ServiceManager.getMetsService().loadWorkpiece(metadataFileUri);
         List<String> indices = Arrays.asList(insertionPosition.split(Pattern.quote(INSERTION_POSITION_SEPARATOR)));
@@ -138,9 +145,14 @@ public class MetadataEditor {
      *            ID of process whose link will be remove from workpiece of
      *            parent process
      * @throws IOException
-     *             thrown if meta.xml could not be loaded
+     *            when the METS file cannot be read or written
+     * @throws SAXException
+     *            when XML validation error occurs when loading the metadata file
+     * @throws FileStructureValidationException
+     *            when XML validation of metadata files fails
      */
-    public static void removeLink(Process parentProcess, int childProcessId) throws IOException {
+    public static void removeLink(Process parentProcess, int childProcessId) throws IOException, SAXException,
+            FileStructureValidationException {
         URI metadataFileUri = ServiceManager.getProcessService().getMetadataFileUri(parentProcess);
         Workpiece workpiece = ServiceManager.getMetsService().loadWorkpiece(metadataFileUri);
         if (removeLinkRecursive(workpiece.getLogicalStructure(), childProcessId)) {
@@ -305,7 +317,7 @@ public class MetadataEditor {
         handlePosition(workpiece, logicalDivision, position, viewsToAdd, parents, siblings, newStructure);
 
         if (Objects.nonNull(viewsToAdd) && !viewsToAdd.isEmpty()) {
-            handleViewsToAdd(viewsToAdd, newStructure);
+            handleViewsToAdd(viewsToAdd, newStructure, workpiece.getLogicalStructure());
         }
         return newStructure;
     }
@@ -327,14 +339,14 @@ public class MetadataEditor {
                     // new structure ORDER must be set to same min ORDER value of contained physical divisions
                     newStructure.setOrder(structureOrder);
                     List<Integer> siblingOrderValues = Stream.concat(logicalDivision.getChildren().stream()
-                            .map(Division::getOrder), Stream.of(structureOrder)).sorted().collect(Collectors.toList());
+                            .map(Division::getOrder), Stream.of(structureOrder)).sorted().toList();
 
                     // new order must be set at correct location between existing siblings
                     logicalDivision.getChildren().add(siblingOrderValues.lastIndexOf(structureOrder), newStructure);
                 }
                 break;
             case FIRST_CHILD_OF_CURRENT_ELEMENT:
-                logicalDivision.getChildren().add(0, newStructure);
+                logicalDivision.getChildren().addFirst(newStructure);
                 break;
             case LAST_CHILD_OF_CURRENT_ELEMENT:
                 logicalDivision.getChildren().add(newStructure);
@@ -352,11 +364,18 @@ public class MetadataEditor {
         }
     }
 
-    private static void handleViewsToAdd(List<View> viewsToAdd, LogicalDivision newStructure) {
+    private static void handleViewsToAdd(List<View> viewsToAdd, LogicalDivision newStructure,
+                                         LogicalDivision rootStructure) {
         for (View viewToAdd : viewsToAdd) {
             List<LogicalDivision> logicalDivisions = viewToAdd.getPhysicalDivision().getLogicalDivisions();
-            for (LogicalDivision elementToUnassign : logicalDivisions) {
-                elementToUnassign.getViews().remove(viewToAdd);
+            if (logicalDivisions.isEmpty() && Objects.nonNull(rootStructure)) {
+                // In an unsaved process, unstructured media may not yet have
+                // the root logical division registered explicitly.
+                rootStructure.getViews().remove(viewToAdd);
+            } else {
+                for (LogicalDivision elementToUnassign : logicalDivisions) {
+                    elementToUnassign.getViews().remove(viewToAdd);
+                }
             }
             logicalDivisions.clear();
             logicalDivisions.add(newStructure);
@@ -395,7 +414,7 @@ public class MetadataEditor {
                 siblings.add(siblings.indexOf(parent), newPhysicalDivision);
                 break;
             case FIRST_CHILD_OF_CURRENT_ELEMENT:
-                parent.getChildren().add(0, newPhysicalDivision);
+                parent.getChildren().addFirst(newPhysicalDivision);
                 break;
             case LAST_CHILD_OF_CURRENT_ELEMENT:
                 parent.getChildren().add(newPhysicalDivision);
@@ -419,7 +438,7 @@ public class MetadataEditor {
         viewsToAdd.removeAll(assignedViews);
         List<View> sortedViews = Stream.concat(assignedViews.stream(), viewsToAdd.stream())
                 .sorted(Comparator.comparing(view -> view.getPhysicalDivision().getOrder()))
-                .collect(Collectors.toList());
+                .toList();
         assignedViews.clear();
         assignedViews.addAll(sortedViews);
     }
@@ -477,7 +496,7 @@ public class MetadataEditor {
             List<LogicalDivision> logicalDivisionList = determineLogicalDivisionPathToChild(
                 logicalDivisionChild, number);
             if (!logicalDivisionList.isEmpty()) {
-                logicalDivisionList.add(0, logicalDivision);
+                logicalDivisionList.addFirst(logicalDivision);
                 return logicalDivisionList;
             }
         }
@@ -595,8 +614,8 @@ public class MetadataEditor {
      */
     public static View getFirstViewForPhysicalDivision(PhysicalDivision physicalDivision) {
         List<LogicalDivision> logicalDivisions = physicalDivision.getLogicalDivisions();
-        if (!logicalDivisions.isEmpty() && Objects.nonNull(logicalDivisions.get(0))) {
-            for (View view : logicalDivisions.get(0).getViews()) {
+        if (!logicalDivisions.isEmpty() && Objects.nonNull(logicalDivisions.getFirst())) {
+            for (View view : logicalDivisions.getFirst().getViews()) {
                 if (Objects.nonNull(view) && Objects.equals(view.getPhysicalDivision(), physicalDivision)) {
                     return view;
                 }

@@ -20,13 +20,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.faces.context.FacesContext;
+import jakarta.faces.context.FacesContext;
 
 import org.kitodo.production.enums.FilterPart;
 import org.kitodo.production.enums.FilterString;
-import org.kitodo.production.forms.CurrentTaskForm;
-import org.kitodo.production.forms.ProcessForm;
-import org.kitodo.production.forms.UserForm;
+import org.kitodo.production.forms.process.ProcessListView;
+import org.kitodo.production.forms.task.TaskListView;
+import org.kitodo.production.forms.user.UserListView;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.FilterService;
 
@@ -74,9 +74,9 @@ public class FilterMenu {
             "language:"
     );
 
-    private ProcessForm processForm = null;
-    private CurrentTaskForm taskForm = null;
-    private UserForm userForm = null;
+    private ProcessListView processListView = null;
+    private TaskListView taskListView = null;
+    private UserListView userListView = null;
     private List<Suggestion> suggestions;
     private final List<ParsedFilter> parsedFilters;
     private String filterInEditMode;
@@ -84,10 +84,10 @@ public class FilterMenu {
     /**
      * Constructor of filter menu for processes.
      *
-     * @param processForm instance of ProcessForm
+     * @param processListView instance of ProcessListView
      */
-    public FilterMenu(ProcessForm processForm) {
-        this.processForm = processForm;
+    public FilterMenu(ProcessListView processListView) {
+        this.processListView = processListView;
         suggestions = createSuggestionsForProcessCategory("");
         parsedFilters = new ArrayList<>();
     }
@@ -95,10 +95,10 @@ public class FilterMenu {
     /**
      * Constructor of filter menu for tasks.
      *
-     * @param taskForm instance of CurrentTaskForm
+     * @param taskListView instance of TaskListView
      */
-    public FilterMenu(CurrentTaskForm taskForm) {
-        this.taskForm = taskForm;
+    public FilterMenu(TaskListView taskListView) {
+        this.taskListView = taskListView;
         suggestions = createSuggestionsForTaskCategory("");
         parsedFilters = new ArrayList<>();
     }
@@ -106,10 +106,10 @@ public class FilterMenu {
     /**
      * Constructor of filter menu for users.
      *
-     * @param userForm instance of UserForm
+     * @param userListView instance of UserListView
      */
-    public FilterMenu(UserForm userForm) {
-        this.userForm = userForm;
+    public FilterMenu(UserListView userListView) {
+        this.userListView = userListView;
         suggestions = createSuggestionsForUserCategory("");
         parsedFilters = new ArrayList<>();
     }
@@ -144,11 +144,11 @@ public class FilterMenu {
         int lastColonIndex = strippedInput.lastIndexOf(":");
         if (lastColonIndex == -1) {
             // category should be suggested
-            if (Objects.nonNull(processForm)) {
+            if (Objects.nonNull(processListView)) {
                 suggestions = createSuggestionsForProcessCategory(input);
-            } else if (Objects.nonNull(taskForm)) {
+            } else if (Objects.nonNull(taskListView)) {
                 suggestions = createSuggestionsForTaskCategory(input);
-            } else if (Objects.nonNull(userForm)) {
+            } else if (Objects.nonNull(userListView)) {
                 suggestions = createSuggestionsForUserCategory(input);
             }
         } else {
@@ -156,35 +156,57 @@ public class FilterMenu {
             String lastPart = input.substring(lastColonIndex + 1);
             Pattern patternNextCategory = Pattern.compile("(?<= \\| )\\w?$");
             Matcher matcherNextCategory = patternNextCategory.matcher(lastPart);
-            if (Objects.nonNull(processForm)) {
+            if (Objects.nonNull(processListView)) {
                 if (matcherNextCategory.find()) {
                     // strings ends with " | "
                     suggestions = createSuggestionsForProcessCategory(matcherNextCategory.group());
                 } else {
                     // process value should be suggested
-                    Pattern patternPreviousCategory = Pattern.compile("\\w+:(?!.*:)");
-                    Matcher matcherPreviousCategory = patternPreviousCategory.matcher(input);
-                    String category = matcherPreviousCategory.find() ? matcherPreviousCategory.group() : "";
-                    suggestions = createSuggestionsForProcessValue(checkFilterCategory(category, processCategories), lastPart);
+                    suggestions = createSuggestionsForProcessValue(
+                        checkFilterCategory(findSuggestionCategory(input), processCategories), 
+                        lastPart
+                    );
                 }
-            } else if (Objects.nonNull(taskForm)) {
+            } else if (Objects.nonNull(taskListView)) {
                 if (matcherNextCategory.find()) {
                     // strings ends with " | "
                     suggestions = createSuggestionsForTaskCategory(matcherNextCategory.group());
                 } else {
                     // process/task value should be suggested
-                    Pattern patternPreviousCategory = Pattern.compile("\\w+:(?!.*:)");
-                    Matcher matcherPreviousCategory = patternPreviousCategory.matcher(input);
-                    String category = matcherPreviousCategory.find() ? matcherPreviousCategory.group() : "";
-                    suggestions = createSuggestionsForTaskValue(checkFilterCategory(category, taskCategories), lastPart);
+                    suggestions = createSuggestionsForTaskValue(
+                        checkFilterCategory(findSuggestionCategory(input), taskCategories), 
+                        lastPart
+                    );
                 }
-            } else if (Objects.nonNull(userForm)) {
+            } else if (Objects.nonNull(userListView)) {
                 if (matcherNextCategory.find()) {
                     // strings ends with " | "
                     suggestions = createSuggestionsForUserCategory(matcherNextCategory.group());
                 }
             }
         }
+    }
+
+    /**
+     * Return the last category in the filter string that is used for displaying suggestions.
+     * 
+     * <p>Does not use regular expression matching with negative lookahead to prevent possible 
+     * denial of service attack from user input. Instead, split input at colon symbol by adding 
+     * space at the end such that the potential category is always split as the second last 
+     * array element. Finally, finds last word in string by revesering it and finding first 
+     * word instead, which has linear search complexity.
+     * 
+     * @param input the filter string
+     * @return the last category in this filter string
+     */
+    private String findSuggestionCategory(String input) {
+        String[] colonSplit = (input + " ").split(":"); 
+        String secondLastSplit = colonSplit.length > 1 ? colonSplit[colonSplit.length - 2] : "";
+        // find the last word by reversing the string and finding the first word
+        String reversed = new StringBuilder(secondLastSplit).reverse().toString();
+        Matcher firstWordMatcher = Pattern.compile("^\\w+").matcher(reversed);
+        String firstReversedWord = firstWordMatcher.find() ? ":" + firstWordMatcher.group() : "";
+        return new StringBuilder(firstReversedWord).reverse().toString();
     }
 
     private List<Suggestion> filterSuggestionsForCategory(String input, List<FilterString> suggestions) {
@@ -289,8 +311,8 @@ public class FilterMenu {
      */
     private FilterString checkFilterCategory(String categoryInput, List<FilterString> categories) {
         return categories.stream()
-                .filter(f -> f.getFilterGerman().equals(categoryInput.toLowerCase())
-                        || f.getFilterEnglish().equals(categoryInput.toLowerCase()))
+                .filter(f -> f.getFilterGerman().equalsIgnoreCase(categoryInput)
+                        || f.getFilterEnglish().equalsIgnoreCase(categoryInput))
                 .findFirst().orElse(null);
     }
 
@@ -395,12 +417,12 @@ public class FilterMenu {
             }
             newFilter.append(parsedFilter.getPlainFilter());
         }
-        if (Objects.nonNull(processForm)) {
-            processForm.setFilter(newFilter.toString());
-        } else if (Objects.nonNull(taskForm)) {
-            taskForm.setFilter(newFilter.toString());
-        } else if (Objects.nonNull(userForm)) {
-            userForm.setFilter(newFilter.toString());
+        if (Objects.nonNull(processListView)) {
+            processListView.setFilter(newFilter.toString());
+        } else if (Objects.nonNull(taskListView)) {
+            taskListView.setFilter(newFilter.toString());
+        } else if (Objects.nonNull(userListView)) {
+            userListView.setFilter(newFilter.toString());
         }
     }
 }

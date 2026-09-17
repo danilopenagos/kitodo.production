@@ -11,6 +11,7 @@
 
 package org.kitodo.production.forms;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -21,10 +22,10 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
-import javax.faces.context.FacesContext;
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
-import javax.xml.bind.JAXBException;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
+import jakarta.xml.bind.JAXBException;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -42,7 +43,9 @@ import org.kitodo.production.services.ServiceManager;
 
 @Named("LtpValidationConfigurationEditView")
 @ViewScoped
-public class LtpValidationConfigurationEditView extends BaseForm {
+public class LtpValidationConfigurationEditView extends BaseEditView {
+
+    public static final String VIEW_PATH = MessageFormat.format(REDIRECT_PATH, "ltpValidationConfigurationEdit");
 
     private static final Logger logger = LogManager.getLogger(LtpValidationConfigurationEditView.class);
     private LtpValidationConfiguration configuration = new LtpValidationConfiguration();
@@ -111,7 +114,7 @@ public class LtpValidationConfigurationEditView extends BaseForm {
     public String save() {
         try {
             ServiceManager.getLtpValidationConfigurationService().save(configuration);
-            return projectsPage;
+            return LtpValidationConfigurationListView.VIEW_PATH +  "&" + getReferrerListOptions();
         } catch (DAOException e) {
             Helper.setErrorMessage(ERROR_SAVING,
                 new Object[] {ObjectType.LTP_VALIDATION_CONFIGURATION.getTranslationSingular() }, logger, e);
@@ -191,7 +194,7 @@ public class LtpValidationConfigurationEditView extends BaseForm {
 
     /**
      * Adds an empty validation condition to the list of conditions if the user
-     * clicks on the add validation condition buttton.
+     * clicks on the add validation condition button.
      */
     public void addValidationCondition() {
         LtpValidationCondition condition = new LtpValidationCondition();
@@ -257,12 +260,12 @@ public class LtpValidationConfigurationEditView extends BaseForm {
      * @param operation
      *            the expected operation
      * @return true if the condition is a condition matching the given property
-     *         and operation, indepedent of its value
+     *         and operation, independent of its value
      */
     private boolean isSimpleCondition(LtpValidationCondition condition, String property,
             LtpValidationConditionOperation operation) {
         if (Objects.nonNull(condition) && Objects.nonNull(condition.getProperty())
-                && condition.getProperty().toLowerCase().equals(property.toLowerCase())
+                && condition.getProperty().equalsIgnoreCase(property)
                 && Objects.nonNull(condition.getOperation()) && condition.getOperation().equals(operation)) {
             return true;
         }
@@ -422,7 +425,7 @@ public class LtpValidationConfigurationEditView extends BaseForm {
         LtpValidationCondition condition = findSimpleCondition(PROPERTY_FILENAME,
             LtpValidationConditionOperation.MATCHES);
         if (Objects.nonNull(condition) && Objects.nonNull(condition.getValues()) && condition.getValues().size() == 1) {
-            return condition.getValues().get(0);
+            return condition.getValues().getFirst();
         }
         return simpleFilenamePattern;
     }
@@ -431,7 +434,7 @@ public class LtpValidationConfigurationEditView extends BaseForm {
      * Sets the filename pattern that needs to match each file of a folder.
      * 
      * @param simpleFilenamePattern
-     *            the filname pattern
+     *            the filename pattern
      */
     public void setSimpleFilenamePattern(String simpleFilenamePattern) {
         this.simpleFilenamePattern = simpleFilenamePattern;

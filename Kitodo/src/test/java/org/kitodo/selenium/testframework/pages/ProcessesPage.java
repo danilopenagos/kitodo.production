@@ -51,30 +51,30 @@ public class ProcessesPage extends Page<ProcessesPage> {
     private static final String WAIT_FOR_COLUMN_SORT = "Wait for column sorting";
     private static final String MULTI_VOLUME_WORK_PROCESS_TITLE = "Multi volume work test process";
     private static final String WAIT_FOR_SELECTION_MENU = "Wait for process selection menu to open";
-    private static final String CALENDER_ACTION_XPATH = "//a[@href='/kitodo/pages/calendarEdit.jsf?id=%s']";
+    private static final String CALENDER_ACTION_XPATH = "//a[@href='/kitodo/pages/calendarEdit?id=%s']";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_TAB_VIEW)
     private WebElement processesTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_TABLE + DATA)
     private WebElement processesTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_TABLE_HEADER)
     private WebElement processesTableHeader;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":selectBatches")
     private WebElement batchesSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":selectProcesses")
     private WebElement processesSelect;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/processEdit.jsf?referer=processes&id=1']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/processEdit') and contains(@href, 'id=1')]")
     private WebElement editProcessLink;
 
     private WebElement downloadDocketLink;
@@ -83,71 +83,71 @@ public class ProcessesPage extends Page<ProcessesPage> {
 
     private WebElement editMetadataLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "search")
     private WebElement searchForProcessesButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_FORM + ":createExcel")
     private WebElement downloadSearchResultAsExcel;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_FORM + ":createPdf")
     private WebElement downloadSearchResultAsPdf;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROCESSES_FORM + ":actionsButton")
     private WebElement actionsButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":batchActionsButton")
     private WebElement possibleBatchActionsButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":processActionsButton")
     private WebElement possibleProcessActionsButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":createBatchSelection")
     private WebElement createBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":renameBatchSelection")
     private WebElement renameBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":deleteBatchSelection")
     private WebElement deleteBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":addProcessesToBatch")
     private WebElement addProcessesToBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":removeProcessesFromBatchSelection")
     private WebElement removeProcessesFromBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = BATCH_FORM + ":downloadDocket")
     private WebElement downloadDocketForBatchLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "createBatchForm:batchTitle")
     private WebElement createBatchTitleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "createBatchForm:save")
     private WebElement createBatchSaveButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "renameBatchForm:batchTitle")
     private WebElement renameBatchTitleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "renameBatchForm:save")
     private WebElement renameBatchSaveButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = FILTER_INPUT)
     private WebElement filterInput;
 
@@ -167,7 +167,7 @@ public class ProcessesPage extends Page<ProcessesPage> {
     private WebElement headerText;
 
     public ProcessesPage() {
-        super("pages/processes.jsf");
+        super("pages/processes");
     }
 
     /**
@@ -340,10 +340,9 @@ public class ProcessesPage extends Page<ProcessesPage> {
 
     /**
      * Set 'edit metadata' link for default process with title saved in PROCESS_TITLE and click it.
-     * @throws IllegalAccessException when retrieving metadata editor page fails
-     * @throws InstantiationException when retrieving metadata editor page fails
+     * @throws ReflectiveOperationException when retrieving metadata editor page fails
      */
-    public void editMetadata() throws IllegalAccessException, InstantiationException {
+    public void editMetadata() throws ReflectiveOperationException {
         setEditMetadataLink(SECOND_PROCESS_TITLE);
         clickButtonAndWaitForRedirect(editMetadataLink, Pages.getMetadataEditorPage().getUrl());
     }
@@ -351,20 +350,18 @@ public class ProcessesPage extends Page<ProcessesPage> {
     /**
      * Set 'edit metadata' link for default process with given title 'processTitle' and click it.
      * @param processTitle title of process whose 'edit metadata' link is clicked
-     * @throws InstantiationException when retrieving metadata editor page fails
-     * @throws IllegalAccessException when retrieving metadata editor page fails
+     * @throws ReflectiveOperationException when retrieving metadata editor page fails
      */
-    public void editMetadata(String processTitle) throws InstantiationException, IllegalAccessException {
+    public void editMetadata(String processTitle) throws ReflectiveOperationException {
         setEditMetadataLink(processTitle);
         clickButtonAndWaitForRedirect(editMetadataLink, Pages.getMetadataEditorPage().getUrl());
     }
 
     /**
      * Open second process in metadata editor.
-     * @throws IllegalAccessException when navigating to metadata editor page fails
-     * @throws InstantiationException when navigating to metadata editor page fails
+     * @throws ReflectiveOperationException when navigating to metadata editor page fails
      */
-    public void editSecondProcessMetadata() throws IllegalAccessException, InstantiationException {
+    public void editSecondProcessMetadata() throws ReflectiveOperationException {
         try {
             setEditMetadataLink(SECOND_PROCESS_TITLE);
             clickButtonAndWaitForRedirect(editMetadataLink, Pages.getMetadataEditorPage().getUrl());
@@ -375,10 +372,9 @@ public class ProcessesPage extends Page<ProcessesPage> {
 
     /**
      * Open parent process in metadata editor.
-     * @throws IllegalAccessException when navigating to metadata editor page fails
-     * @throws InstantiationException when navigating to metadata editor page fails
+     * @throws ReflectiveOperationException when navigating to metadata editor page fails
      */
-    public void editParentProcessMetadata() throws InstantiationException, IllegalAccessException {
+    public void editParentProcessMetadata() throws ReflectiveOperationException {
         try {
             setEditMetadataLink(PARENT_PROCESS_TITLE);
             clickButtonAndWaitForRedirect(editMetadataLink, Pages.getMetadataEditorPage().getUrl());
@@ -414,7 +410,7 @@ public class ProcessesPage extends Page<ProcessesPage> {
 
     private void setDownloadDocketLink() {
         int index = getRowIndex(processesTable, SECOND_PROCESS_TITLE, 3);
-        downloadDocketLink = Browser.getDriver().findElementById(PROCESSES_TABLE + ":" + index + ":downloadDocket");
+        downloadDocketLink = Browser.getDriver().findElement(By.id(PROCESSES_TABLE + ":" + index + ":downloadDocket"));
     }
 
     /**
@@ -423,12 +419,12 @@ public class ProcessesPage extends Page<ProcessesPage> {
      */
     private void setEditMetadataLink(String processTitle) {
         int index = getRowIndex(processesTable, processTitle, 3);
-        editMetadataLink = Browser.getDriver().findElementById(PROCESSES_TABLE + ":" + index + ":editMetadata");
+        editMetadataLink = Browser.getDriver().findElement(By.id(PROCESSES_TABLE + ":" + index + ":editMetadata"));
     }
 
     private void setDownloadLogLink() {
         int index = getRowIndex(processesTable, SECOND_PROCESS_TITLE, 3);
-        downloadLogLink = Browser.getDriver().findElementById(PROCESSES_TABLE + ":" + index + ":exportLogXml");
+        downloadLogLink = Browser.getDriver().findElement(By.id(PROCESSES_TABLE + ":" + index + ":exportLogXml"));
     }
 
     /**
@@ -442,14 +438,14 @@ public class ProcessesPage extends Page<ProcessesPage> {
         switchToTabByIndex(index, processesTabView);
     }
 
-    public void navigateToExtendedSearch() throws IllegalAccessException, InstantiationException {
+    public void navigateToExtendedSearch() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(searchForProcessesButton, Pages.getExtendedSearchPage().getUrl());
     }
 
     /**
      * Submits a filter query by typing some text into the input field and submitting the filter form.
      *
-     * <p>This method doesn't block until the filter is sucessfully applied.</p>
+     * <p>This method doesn't block until the filter is successfully applied.</p>
      *
      * @param filterQuery the query
      */
@@ -512,7 +508,7 @@ public class ProcessesPage extends Page<ProcessesPage> {
      */
     public void goToCalendar(int processId) throws Exception {
         String xpath = String.format(CALENDER_ACTION_XPATH, processId);
-        WebElement openCalendarLink = Browser.getDriver().findElementByXPath(xpath);
+        WebElement openCalendarLink = Browser.getDriver().findElement(By.xpath(xpath));
         if (isNotAt()) {
             goTo();
         }
@@ -556,10 +552,9 @@ public class ProcessesPage extends Page<ProcessesPage> {
 
     /**
      * Clicks 'create child process' link in actions column and waits for redirect to 'create new process' page.
-     * @throws InstantiationException when retrieving process from template page fails
-     * @throws IllegalAccessException when retrieving process from template page fails
+     * @throws ReflectiveOperationException when retrieving process from template page fails
      */
-    public void createChildProcess() throws InstantiationException, IllegalAccessException {
+    public void createChildProcess() throws ReflectiveOperationException {
         List<WebElement> processTitleCells = processesTable.findElements(By.cssSelector("tr td:nth-child(4)"));
         Optional<WebElement> mvwTitleCell = processTitleCells.stream().filter(row -> row.getText()
                 .equals(MULTI_VOLUME_WORK_PROCESS_TITLE)).findFirst();

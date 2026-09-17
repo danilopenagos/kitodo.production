@@ -19,9 +19,13 @@
         xmlns:p="http://primefaces.org/ui">
 
     <!--@elvariable id="id" type="java.lang.Integer"-->
+    <!--@elvariable id="referrerListOptions" type="java.lang.String"-->
+
     <f:metadata>
         <f:viewParam name="id"/>
         <f:viewAction action="#{mappingFileEditView.load(id)}"/>
+        <f:viewParam name="referrerListOptions"/>
+        <f:viewAction action="#{mappingFileEditView.setReferrerListOptionsFromTemplate(referrerListOptions)}"/>
     </f:metadata>
 
     <!--@elvariable id="isEditMode" type="boolean"-->
@@ -44,7 +48,7 @@
 
         <p:button id="cancel" value="#{msgs.cancel}"
                   onclick="setConfirmUnload(false);"
-                  outcome="projects?keepPagination=true"
+                  outcome="projects?tab=mappingFilesTab&amp;#{mappingFileEditView.referrerListOptions}"
                   icon="fa fa-times fa-lg"
                   iconPos="right"
                   styleClass="secondary"/>
@@ -73,7 +77,7 @@
                 <p:panelGrid id="mappingFile-grid"
                              columns="2"
                              layout="grid">
-                    <p:row>
+                    <p:panel styleClass="column-wrapper">
                         <div>
                             <p:outputLabel for="title"
                                            value="#{msgs.title} *"/>
@@ -126,8 +130,8 @@
                             <p:tooltip for="prestructuredImportHelp"
                                        value="#{msgs['tooltip.mappingFile.prestructuredImport']}"/>
                         </div>
-                    </p:row>
-                    <p:row>
+                    </p:panel>
+                    <p:panel styleClass="column-wrapper">
                         <div>
                             <p:outputLabel for="inputFormat"
                                            value="#{msgs['mappingFile.inputFormat']}"/>
@@ -168,15 +172,21 @@
                             <p:tooltip for="outputFormatHelp"
                                        value="#{msgs['tooltip.mappingFile.outputFormat']}"/>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
             </p:tab>
         </p:tabView>
     </ui:define>
 
+    <ui:define name="dialog">
+        <ui:include src="/WEB-INF/templates/includes/validationErrorsDialog.xhtml">
+            <ui:param name="validatableForm" value="#{mappingFileEditView}"/>
+        </ui:include>
+    </ui:define>
+
     <ui:define name="breadcrumbs">
-        <p:menuitem value="#{msgs.desktop}" url="desktop.jsf" icon="fa fa-home"/>
-        <p:menuitem value="#{msgs.projects}" url="projects.jsf" icon="fa fa-archive"/>
+        <p:menuitem value="#{msgs.desktop}" url="desktop" icon="fa fa-home"/>
+        <p:menuitem value="#{msgs.projects}" url="projects" icon="fa fa-archive"/>
         <p:menuitem value="#{msgs['mappingFile.mode.edit']}" rendered="#{isEditMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['mappingFile.mode.create']}" rendered="#{isCreateMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['mappingFile.mode.view']}" rendered="#{isViewMode}" icon="fa fa-cogs"/>

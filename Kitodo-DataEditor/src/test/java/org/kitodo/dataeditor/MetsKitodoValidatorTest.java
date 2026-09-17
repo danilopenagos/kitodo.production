@@ -16,10 +16,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-import javax.xml.bind.JAXBException;
+import jakarta.xml.bind.JAXBException;
 
 import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.AfterEach;
@@ -39,7 +40,9 @@ public class MetsKitodoValidatorTest {
 
     @AfterEach
     public void revertFile() throws IOException {
-        IOUtils.write( testMetaOldFormat, Files.newOutputStream(Paths.get(pathOfOldMetaFormat)));
+        try (OutputStream out = Files.newOutputStream(Paths.get(pathOfOldMetaFormat))) {
+            IOUtils.write(testMetaOldFormat, out);
+        }
     }
 
     @Test

@@ -18,7 +18,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.FileSystems;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.Arrays;
@@ -40,6 +39,7 @@ import org.apache.commons.collections4.BidiMap;
 import org.apache.commons.collections4.bidimap.DualHashBidiMap;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kitodo.api.command.CommandResult;
@@ -140,8 +140,7 @@ public class FileService {
             logger.info("Metadata directory: {} already existed! No new directory was created", directoryName);
         } else {
             CommandService commandService = ServiceManager.getCommandService();
-            String path = FileSystems.getDefault()
-                    .getPath(ConfigCore.getKitodoDataDirectory(), parentFolderUri.getRawPath(), directoryName)
+            String path = Paths.get(ConfigCore.getKitodoDataDirectory(), parentFolderUri.getRawPath(), directoryName)
                     .normalize().toAbsolutePath().toString();
             List<String> commandParameter = Collections.singletonList(path);
             File script = new File(ConfigCore.getParameter(ParameterCore.SCRIPT_CREATE_DIR_META));
@@ -1081,7 +1080,7 @@ public class FileService {
         canonicals.forEach(mediaToAdd.keySet()::remove);
         removeMissingMediaFromWorkpiece(mediaToRemove, workpiece, subfolders.values());
         List<PhysicalDivision> children = workpiece.getPhysicalStructure().getChildren();
-        boolean orderedChildren = (!children.isEmpty() && children.get(0).getOrder() > 0);
+        boolean orderedChildren = (!children.isEmpty() && children.getFirst().getOrder() > 0);
         addNewMediaToWorkpiece(canonicals, mediaToAdd, workpiece, orderedChildren);
         renumberPhysicalDivisions(workpiece, true);
         if (ConfigCore.getBooleanParameter(ParameterCore.WITH_AUTOMATIC_PAGINATION)) {
@@ -1105,7 +1104,7 @@ public class FileService {
                     .map(View::of).forEachOrdered(logicalDivision.getViews()::add);
         } else if (logicalDivision.getChildren().size() == 1) {
             automaticallyAssignPhysicalDivisionsToEffectiveRootRecursive(workpiece,
-                logicalDivision.getChildren().get(0));
+                logicalDivision.getChildren().getFirst());
         }
     }
 
@@ -1224,7 +1223,7 @@ public class FileService {
 
         LogicalDivision actualLogicalRoot = workpiece.getLogicalStructure();
         while (Objects.isNull(actualLogicalRoot.getType()) && actualLogicalRoot.getChildren().size() == 1) {
-            actualLogicalRoot = actualLogicalRoot.getChildren().get(0);
+            actualLogicalRoot = actualLogicalRoot.getChildren().getFirst();
         }
         // If the newspaper has multiple issues in the process, then everything stays as it was
         if (Objects.isNull(actualLogicalRoot.getType()) && actualLogicalRoot.getChildren().size() != 1) {
@@ -1252,10 +1251,12 @@ public class FileService {
                         break;
                     }
                 }
-                workpiece.getPhysicalStructure().getChildren().add(insertionPoint, physicalDivision);
-                actualLogicalRoot.getViews().add(insertionPoint, view);
-                view.getPhysicalDivision().getLogicalDivisions().add(actualLogicalRoot);
-                canonicals.add(insertionPoint, entry.getKey());
+                int safeIndexChildren = Math.min(insertionPoint, workpiece.getPhysicalStructure().getChildren().size());
+                int safeIndexViews = Math.min(insertionPoint, actualLogicalRoot.getViews().size());
+                int safeIndexCanonicals = Math.min(insertionPoint, canonicals.size());
+                workpiece.getPhysicalStructure().getChildren().add(safeIndexChildren, physicalDivision);
+                actualLogicalRoot.getViews().add(safeIndexViews, view);
+                canonicals.add(safeIndexCanonicals, entry.getKey());
             }
         }
     }
@@ -1427,9 +1428,8 @@ public class FileService {
 
     /**
      * Rename media files of current process according to their corresponding media units order attribute. Given Map
-     * "filenameMapping" is altered via side effect and does not need to be returned. Instead, the number of acutally
+     * "filenameMapping" is altered via side effect and does not need to be returned. Instead, the number of actually
      * changed filenames is returned to the calling method.
-     *
      * @param process Process object for which media files are renamed.
      * @param workpiece Workpiece object of process
      * @param filenameMapping Bidirectional map containing current filename mapping; empty until first renaming
@@ -1464,7 +1464,7 @@ public class FileService {
                         // add new mapping otherwise
                         filenameMapping.put(fileUri, tmpUri);
                     }
-                    URI targetUri = new URI(StringUtils.removeStart(StringUtils.removeEnd(tmpUri.toString(),
+                    URI targetUri = new URI(Strings.CS.removeStart(Strings.CS.removeEnd(tmpUri.toString(),
                             TEMP_EXTENSION), process.getId() + SLASH));
                     page.getMediaFiles().put(variantURIEntry.getKey(), targetUri);
                     numberOfRenamedMedia++;
@@ -1478,7 +1478,7 @@ public class FileService {
             String tempFilenameString = tempFilename.toString();
             // skip filename mappings from last renaming round that have not been renamed again
             if (tempFilenameString.endsWith(TEMP_EXTENSION)) {
-                String newFilepath = StringUtils.removeEnd(tempFilename.toString(), TEMP_EXTENSION);
+                String newFilepath = Strings.CS.removeEnd(tempFilename.toString(), TEMP_EXTENSION);
                 filenameMapping.put(renamingEntry.getKey(), fileManagementModule.rename(tempFilename, newFilepath));
             }
         }
@@ -1517,12 +1517,12 @@ public class FileService {
             if (MetadataLock.isLocked(processId)) {
                 lockedProcesses.add(processId);
                 if (ConfigCore.getBooleanParameterOrDefaultValue(ParameterCore.ANONYMIZE)) {
-                    logger.error("Unable to lock process " + processId + " for media renaming because it is currently "
-                            + "being worked on by another user");
+                    logger.error("Unable to lock process {} for media renaming because it is currently being worked on "
+                                    + "by another user", processId);
                 } else {
                     User currentUser = MetadataLock.getLockUser(processId);
-                    logger.error("Unable to lock process " + processId + " for media renaming because it is currently "
-                            + "being worked on by another user (" + currentUser.getFullName() + ")");
+                    logger.error("Unable to lock process {} for media renaming because it is currently being worked on "
+                                    + "by another user ({})", processId, currentUser.getFullName());
                 }
             } else {
                 MetadataLock.setLocked(processId, ServiceManager.getUserService().getCurrentUser());
@@ -1541,7 +1541,7 @@ public class FileService {
      */
     public void revertRenaming(BidiMap<URI, URI> filenameMappings, Workpiece workpiece) {
         // revert media variant URIs for all media files in workpiece to previous, original values
-        logger.info("Reverting to original media filenames of process " + workpiece.getId());
+        logger.info("Reverting to original media filenames of process {}", workpiece.getId());
         for (PhysicalDivision physicalDivision : workpiece
                 .getAllPhysicalDivisionChildrenFilteredByTypes(PhysicalDivision.TYPES)) {
             for (Entry<MediaVariant, URI> mediaVariantURIEntry : physicalDivision.getMediaFiles().entrySet()) {
@@ -1563,7 +1563,7 @@ public class FileService {
                 }
             }
             for (URI tempUri : tempUris) {
-                fileManagementModule.rename(tempUri, StringUtils.removeEnd(tempUri.toString(), TEMP_EXTENSION));
+                fileManagementModule.rename(tempUri, Strings.CS.removeEnd(tempUri.toString(), TEMP_EXTENSION));
             }
         } catch (IOException e) {
             logger.error(e);

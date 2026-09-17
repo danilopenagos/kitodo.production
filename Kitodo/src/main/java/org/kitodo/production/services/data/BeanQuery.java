@@ -19,16 +19,17 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.kitodo.data.database.beans.BaseBean;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.beans.Role;
+import org.kitodo.data.database.beans.Task;
 import org.kitodo.production.enums.ProcessState;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.index.IndexingService;
@@ -61,8 +62,8 @@ public class BeanQuery {
     private final Collection<String> restrictions = new ArrayList<>();
     private final List<String> restrictionAlternatives = new ArrayList<>();
     private boolean indexFiltersAsAlternatives = false;
-    private Pair<String, String> sorting = Pair.of("id", "ASC");
-    private final Map<String, Pair<FilterField, String>> indexQueries = new HashMap<>();
+    private Pair<String, String> sorting;
+    private final List<IndexQueryTerm> indexQueries = new ArrayList<>();
     private final Map<String, Object> parameters = new HashMap<>();
 
     /**
@@ -75,6 +76,19 @@ public class BeanQuery {
         this.beanClass = beanClass;
         className = beanClass.getSimpleName();
         varName = className.toLowerCase();
+        sorting = Pair.of(varName + ".id", "ASC");
+    }
+
+    private String uniqueParameterName(String field) {
+        String baseName = varName(field);
+        String parameterName = baseName;
+        int count = 2;
+
+        while (parameters.containsKey(parameterName)) {
+            parameterName = baseName + count++;
+        }
+
+        return parameterName;
     }
 
     /**
@@ -92,6 +106,14 @@ public class BeanQuery {
     }
 
     /**
+     * Add an explicit inner join to the query.
+     * Example: query.addInnerJoin("p.project proj");
+     */
+    public void addInnerJoin(String join) {
+        innerJoins.add(varName + "." + join);
+    }
+
+    /**
      * Requires that the hits must correspond to any of the specified values in
      * the specified class field.
      * 
@@ -101,7 +123,7 @@ public class BeanQuery {
      *            value that the class field must accept one of
      */
     public void addInCollectionRestriction(String fieldName, Collection<?> values) {
-        String parameterName = varName(fieldName);
+        String parameterName = uniqueParameterName(fieldName);
         restrictions.add(varName + '.' + fieldName + " IN (:" + parameterName + ')');
         parameters.put(parameterName, values);
     }
@@ -130,7 +152,7 @@ public class BeanQuery {
      *            value that the field must not accept
      */
     public void addNotInCollectionRestriction(String field, Collection<Integer> values) {
-        String parameterName = varName(field);
+        String parameterName = uniqueParameterName(field);
         restrictions.add(varName + '.' + field + " NOT IN (:" + parameterName + ')');
         parameters.put(parameterName, values);
     }
@@ -143,6 +165,15 @@ public class BeanQuery {
      */
     public void addNullRestriction(String field) {
         restrictions.add(varName + '.' + field + " IS NULL");
+    }
+
+    /**
+     * Requires that the value in the given field is not {@code null}.
+     *
+     * @param field field that should be not {@code null}
+     */
+    public void addNotNullRestriction(String field) {
+        restrictions.add(varName + '.' + field + " IS NOT NULL");
     }
 
     /**
@@ -212,16 +243,34 @@ public class BeanQuery {
     }
 
     /**
-     * Searches the index and inserts the IDs into the HQL query parameters.
+     * Applies a restriction based on index search results to the given field.
+     *
+     * <p>If index queries were defined, this performs a search in the index and
+     * restricts the query to the resulting IDs. If the index search yields no hits,
+     * a non-matching ID set is applied to ensure the query returns no results.</p>
+     *
+     * <p>If no index queries were defined, no restriction is added.</p>
+     *
+     * @param field the entity field to restrict (e.g. "id" or "process.id")
      */
-    public void performIndexSearches() {
-        for (var iterator = indexQueries.entrySet().iterator(); iterator.hasNext();) {
-            Entry<String, Pair<FilterField, String>> entry = iterator.next();
-            Collection<Integer> ids = indexingService.searchIds(Process.class, entry.getValue().getLeft()
-                    .getSearchField(), entry.getValue().getRight());
-            parameters.put(entry.getKey(), ids.isEmpty() ? NO_HIT : ids);
-            iterator.remove();
+    public void applyIndexRestriction(String field) {
+        if (indexQueries.isEmpty()) {
+            return;
         }
+        Collection<Integer> ids = performIndexSearches();
+        addInCollectionRestriction(field, ids);
+    }
+
+    /**
+     * Executes all collected index query terms as a single combined index search
+     * and returns the matching process IDs. If no hits are found, a non-matching
+     * ID collection is returned by the caller.
+     */
+    private Collection<Integer> performIndexSearches() {
+        Collection<Integer> ids =
+                indexingService.searchIds(Process.class, indexQueries);
+        indexQueries.clear();
+        return ids.isEmpty() ? NO_HIT : ids;
     }
 
     /**
@@ -291,8 +340,7 @@ public class BeanQuery {
      *            roles of the user
      */
     public void restrictToRoles(List<Role> roles) {
-        leftJoins.add("task.roles AS taskRoles");
-        restrictions.add("taskRoles IN (:userRoles)");
+        restrictions.add("EXISTS (SELECT 1 FROM task.roles r WHERE r IN (:userRoles))");
         parameters.put("userRoles", roles);
     }
 
@@ -305,7 +353,8 @@ public class BeanQuery {
      */
     public void restrictWithUserFilterString(String filterString) {
         int userFilterCount = 0;
-        for (var groupFilter : filterService.parse(filterString, beanClass.isAssignableFrom(Process.class))
+        boolean indexed = beanClass.isAssignableFrom(Process.class) || beanClass.isAssignableFrom(Task.class);
+        for (var groupFilter : filterService.parse(filterString, indexed)
                 .entrySet()) {
             List<String> groupFilters = new ArrayList<>();
             for (UserSpecifiedFilter searchFilter : groupFilter.getValue()) {
@@ -324,22 +373,27 @@ public class BeanQuery {
                     }
                 } else {
                     IndexQueryPart indexQueryPart = (IndexQueryPart) searchFilter;
-                    indexQueryPart.putQueryParameters(varName, parameterName, (className.equals("Process") ? "id"
-                            : "process.id"), indexQueries, indexFiltersAsAlternatives ? restrictionAlternatives
-                                    : restrictions);
+                    indexQueryPart.putQueryParameters(indexQueries);
                 }
             }
             if (groupFilters.size() == 1) {
-                restrictions.add(groupFilters.get(0));
+                restrictions.add(groupFilters.getFirst());
             } else if (groupFilters.size() > 1) {
                 restrictions.add("( " + String.join(" OR ", groupFilters) + " )");
             }
         }
     }
 
+    /**
+     * Define sorting using given sortField and sortOrder.
+     * @param sortField field to sort by
+     * @param sortOrder ascending or descending
+     */
     public void defineSorting(String sortField, SortOrder sortOrder) {
-        sorting = Pair.of(sortField.startsWith("lastTask") || sortField.startsWith("CASE") ? sortField
-                : varName + '.' + sortField, SortOrder.DESCENDING.equals(sortOrder) ? "DESC" : "ASC");
+        if (StringUtils.isNotBlank(sortField) && Objects.nonNull(sortOrder)) {
+            sorting = Pair.of(sortField.startsWith("lastTask") || sortField.startsWith("CASE") ? sortField
+                    : varName + '.' + sortField, SortOrder.DESCENDING.equals(sortOrder) ? "DESC" : "ASC");
+        }
     }
 
     /**
@@ -393,6 +447,21 @@ public class BeanQuery {
     }
 
     /**
+     * Forms and returns a query without a SELECT clause.
+     *
+     * @return the query starting with FROM
+     */
+    public String formQueryWithoutSelect() {
+        StringBuilder query = new StringBuilder(512);
+        innerFormQuery(query);
+        if (Objects.nonNull(sorting)) {
+            query.append(" ORDER BY ").append(sorting.getKey())
+                    .append(' ').append(sorting.getValue());
+        }
+        return query.toString();
+    }
+
+    /**
      * Forms and returns a query for a unique collection of strings.
      * 
      * @param field
@@ -419,7 +488,7 @@ public class BeanQuery {
             query.append(" LEFT JOIN ").append(leftJoin);
         }
         if (restrictionAlternatives.size() == 1) {
-            restrictions.add(restrictionAlternatives.get(0));
+            restrictions.add(restrictionAlternatives.getFirst());
         } else if (restrictionAlternatives.size() > 1) {
             restrictions.add(restrictionAlternatives.stream().collect(Collectors.joining(" OR ", "(", ")")));
         }

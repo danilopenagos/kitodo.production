@@ -141,8 +141,7 @@ public class FilterService extends BaseBeanService<Filter, FilterDAO> {
      */
     public HashMap<String, Object> getSQLFilterMap(Map<?, ?> filters, Class<?> baseClass) throws NoSuchFieldException {
         HashMap<String, Object> filterMap = new HashMap<>();
-        List<String> declaredFields = Arrays.stream(baseClass.getDeclaredFields()).map(Field::getName)
-                .collect(Collectors.toList());
+        List<String> declaredFields = Arrays.stream(baseClass.getDeclaredFields()).map(Field::getName).toList();
         for (String filter : splitFilters(parseFilterString(filters))) {
             String[] filterComponents = filter.split(":");
             if (filterComponents.length == 2) {
@@ -315,7 +314,7 @@ public class FilterService extends BaseBeanService<Filter, FilterDAO> {
                 userSpecifiedFilters.add(userSpecifiedFilter);
             }
         }
-        logger.debug("`{}´ -> {}", filter, userSpecifiedFilters);
+        logger.debug("\"{}\" -> {}", filter, userSpecifiedFilters);
         return userSpecifiedFilters;
     }
 
@@ -381,11 +380,11 @@ public class FilterService extends BaseBeanService<Filter, FilterDAO> {
      * @return filter for search item, or {@code null} if it doesn’t make sense
      */
     private static UserSpecifiedFilter parseQueryPart(String item, boolean indexed) {
-        boolean substract = item.startsWith(NOT_SEARCH_PREFIX);
-        if (substract) {
+        boolean subtract = item.startsWith(NOT_SEARCH_PREFIX);
+        if (subtract) {
             item = item.substring(1);
         }
-        boolean operand = !substract;
+        boolean operand = !subtract;
 
         int colon = item.indexOf(":");
         if (colon < 0) {
@@ -410,13 +409,15 @@ public class FilterService extends BaseBeanService<Filter, FilterDAO> {
         }
 
         Matcher idSearch = ID_SEARCH_PATTERN.matcher(value);
-        if (idSearch.matches()) {
+        if (idSearch.matches()
+                && !filterField.equals(FilterField.PROCESS_TITLE)
+                && !filterField.equals(FilterField.SEARCH)) {
             return new DatabaseIdQueryPart(filterField, idSearch.group(1), idSearch.group(2), operand);
         }
 
         if (indexed && Objects.nonNull(filterField.getSearchField())) {
             return new IndexQueryPart(filterField, value, operand);
-        } else if (Objects.equals(filterField, FilterField.PROCESS_ID)) {
+        } else if (Objects.equals(filterField, FilterField.PROCESS_ID) && value.matches(".*\\d.*"))  {
             return new DatabaseIdQueryPart(filterField, value, operand);
         } else {
             return new DatabaseQueryPart(filterField, value, operand);

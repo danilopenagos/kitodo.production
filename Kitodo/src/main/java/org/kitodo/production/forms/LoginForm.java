@@ -15,10 +15,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.Objects;
 
-import javax.enterprise.context.SessionScoped;
-import javax.faces.context.ExternalContext;
-import javax.faces.context.FacesContext;
-import javax.inject.Named;
+import jakarta.enterprise.context.SessionScoped;
+import jakarta.faces.context.ExternalContext;
+import jakarta.faces.context.FacesContext;
+import jakarta.inject.Named;
 
 import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.exceptions.DAOException;
@@ -33,8 +33,8 @@ import org.primefaces.PrimeFaces;
 public class LoginForm implements Serializable {
     private User loggedUser;
     private boolean firstVisit = true;
-    private static final String INDEXING_PAGE = "system.jsf?tabIndex=";
-    private static final String DESKTOP_VIEW = "desktop.jsf";
+    private static final String INDEXING_PAGE = "system?tabIndex=";
+    private static final String DESKTOP_VIEW = "desktop";
     private final SecurityAccessService securityAccessService = ServiceManager.getSecurityAccessService();
 
     /**

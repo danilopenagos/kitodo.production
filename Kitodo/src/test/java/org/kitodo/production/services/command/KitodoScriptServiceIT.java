@@ -11,13 +11,17 @@
 
 package org.kitodo.production.services.command;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -39,30 +43,36 @@ import org.kitodo.api.dataformat.Workpiece;
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
 import org.kitodo.data.database.beans.Folder;
+import org.kitodo.data.database.beans.ImportConfiguration;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.beans.Project;
 import org.kitodo.data.database.beans.Task;
 import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.production.helper.metadata.legacytypeimplementations.LegacyMetsModsDigitalDocumentHelper;
 import org.kitodo.production.helper.tasks.EmptyTask;
 import org.kitodo.production.helper.tasks.TaskManager;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.test.utils.ProcessTestUtils;
+import org.xml.sax.SAXParseException;
 
 public class KitodoScriptServiceIT {
-    // private static final Logger logger =
-    // LogManager.getLogger(KitodoScriptServiceIT.class);
     private static final String metadataWithDuplicatesTestFile = "testMetaWithDuplicateMetadata.xml";
     private static final String directoryForDerivateGeneration = "testFilesForDerivativeGeneration";
+    private static final String metadataFileInvalidMets = "testMetadataFileInvalidMets.xml";
+    private static final String metadataFileMalformedXml = "testMetadataFileMalformedXml.xml";
     private static int kitodoScriptTestProcessId = -1;
+    private static final List<Integer> invalidMetsStructureProcessIds = new ArrayList<>();
     private static final String testProcessTitle = "Second process";
     private static final int projectId = 1;
     private static final int templateId = 1;
     private static final int rulesetId = 1;
     private static final int userId = 1;
     private static final int clientId = 1;
+    private static final String META_XML = "meta.xml";
+    private static final String META_XML_1 = "meta.xml.1";
 
     private static final File scriptCreateDirMeta = new File(
             ConfigCore.getParameter(ParameterCore.SCRIPT_CREATE_DIR_META));
@@ -85,7 +95,7 @@ public class KitodoScriptServiceIT {
      * Add metadata test process and metadata file for KitodoScriptService tests.
      */
     @BeforeEach
-    public void prepareFileCopy() throws IOException, DAOException {
+    public void prepareTestFiles() throws IOException, DAOException {
         kitodoScriptTestProcessId = MockDatabase.insertTestProcess(testProcessTitle, projectId, templateId, rulesetId);
         ProcessTestUtils.copyTestResources(kitodoScriptTestProcessId, directoryForDerivateGeneration);
         ProcessTestUtils.copyTestMetadataFile(kitodoScriptTestProcessId, metadataWithDuplicatesTestFile);
@@ -95,9 +105,13 @@ public class KitodoScriptServiceIT {
      * Remove test process and metadata file for KitodoScriptService tests.
      */
     @AfterEach
-    public void removeKitodoScriptServiceTestFile() throws IOException, DAOException {
+    public void cleanupTestFiles() throws DAOException {
         ProcessTestUtils.removeTestProcess(kitodoScriptTestProcessId);
         kitodoScriptTestProcessId = -1;
+        for (int id : invalidMetsStructureProcessIds) {
+            ProcessTestUtils.removeTestProcess(id);
+        }
+        invalidMetsStructureProcessIds.clear();
     }
 
     @Test
@@ -221,7 +235,7 @@ public class KitodoScriptServiceIT {
 
         ServiceManager.getKitodoScriptService().execute(processes,
             "action:generateImages \"folders:jpgs/max,jpgs/thumbs\" images:all");
-        EmptyTask taskImageGeneratorThread = TaskManager.getTaskList().get(0);
+        EmptyTask taskImageGeneratorThread = TaskManager.getTaskList().getFirst();
         while (taskImageGeneratorThread.isStartable() || taskImageGeneratorThread.isStoppable()) {
             Thread.sleep(400);
         }
@@ -234,8 +248,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "PDM1.0");
@@ -278,13 +292,13 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         LegacyMetsModsDigitalDocumentHelper metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         Workpiece workpiece = metadataFile.getWorkpiece();
-        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "should not contain metadata beforehand");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -305,7 +319,7 @@ public class KitodoScriptServiceIT {
         metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         workpiece = metadataFile.getWorkpiece();
-        metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(2, metadataOfChapter.size(), "metadata should have been added");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -324,13 +338,13 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMain";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         LegacyMetsModsDigitalDocumentHelper metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         Workpiece workpiece = metadataFile.getWorkpiece();
-        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "should contain metadata beforehand");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -351,7 +365,7 @@ public class KitodoScriptServiceIT {
         metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         workpiece = metadataFile.getWorkpiece();
-        metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(0, metadataOfChapter.size(), "metadata should have been deleted");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -370,13 +384,13 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMain";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         LegacyMetsModsDigitalDocumentHelper metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         Workpiece workpiece = metadataFile.getWorkpiece();
-        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "should contain metadata beforehand");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -397,7 +411,7 @@ public class KitodoScriptServiceIT {
         metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         workpiece = metadataFile.getWorkpiece();
-        metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "metadata should not have been deleted");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -416,13 +430,13 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         LegacyMetsModsDigitalDocumentHelper metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         Workpiece workpiece = metadataFile.getWorkpiece();
-        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        Collection<Metadata> metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "should contain metadata beforehand");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -443,7 +457,7 @@ public class KitodoScriptServiceIT {
         metadataFile = ServiceManager.getProcessService()
                 .readMetadataFile(process);
         workpiece = metadataFile.getWorkpiece();
-        metadataOfChapter = workpiece.getLogicalStructure().getChildren().get(0).getMetadata();
+        metadataOfChapter = workpiece.getLogicalStructure().getChildren().getFirst().getMetadata();
         assertEquals(1, metadataOfChapter.size(), "metadata should not have been deleted");
 
         assertTrue(mainMetsFile.exists(), "File meta.xml should exist");
@@ -486,8 +500,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "legal note");
@@ -530,8 +544,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "legal note");
@@ -554,7 +568,7 @@ public class KitodoScriptServiceIT {
         assertEquals(6, process.getSortHelperMetadata());
         assertEquals(2, process.getSortHelperDocstructs());
 
-        String script = "action:addData " + "key:" + metadataKey + " value:legal note;" + "key:" + metadataKey + " value:secondNote";
+        String script = "action:addData key:" + metadataKey + " \"value:legal note\"; key:" + metadataKey + " \"value:secondNote\"";
         List<Process> processes = new ArrayList<>();
         processes.add(process);
         KitodoScriptService kitodoScript = ServiceManager.getKitodoScriptService();
@@ -581,8 +595,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "Proc");
@@ -621,8 +635,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "LegalNoteAndTermsOfUse";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, String.valueOf(kitodoScriptTestProcessId));
@@ -665,8 +679,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -710,8 +724,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -755,8 +769,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TSL_ATS";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "Proc");
@@ -800,8 +814,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -845,8 +859,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> metadataSearchMap = new HashMap<>();
         metadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -890,8 +904,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> oldMetadataSearchMap = new HashMap<>();
         oldMetadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -944,8 +958,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> oldMetadataSearchMap = new HashMap<>();
         oldMetadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -998,8 +1012,8 @@ public class KitodoScriptServiceIT {
         String metadataKey = "TitleDocMainShort";
 
         File processDir = new File(ConfigCore.getKitodoDataDirectory(), process.getId().toString());
-        File mainMetsFile = new File(processDir, "meta.xml");
-        File backupMetsFile = new File(processDir, "meta.xml.1");
+        File mainMetsFile = new File(processDir, META_XML);
+        File backupMetsFile = new File(processDir, META_XML_1);
 
         HashMap<String, String> oldMetadataSearchMap = new HashMap<>();
         oldMetadataSearchMap.put(metadataKey, "SecondMetaShort");
@@ -1044,5 +1058,110 @@ public class KitodoScriptServiceIT {
         assertEquals(0, process.getSortHelperImages());
         assertEquals(6, process.getSortHelperMetadata());
         assertEquals(2, process.getSortHelperDocstructs());
+    }
+
+    @Test
+    public void shouldSetImportConfiguration() throws Exception {
+        MockDatabase.insertMappingFiles();
+        MockDatabase.insertImportConfigurations();
+        Process process = ServiceManager.getProcessService().getById(kitodoScriptTestProcessId);
+        assertNull(process.getImportConfiguration(), "Test process should not have an import configuration");
+
+        String script = "action:setImportConfiguration id:1";
+        List<Process> processes = new ArrayList<>();
+        processes.add(process);
+
+        ServiceManager.getKitodoScriptService().execute(processes, script);
+
+        Process updatedProcess = ServiceManager.getProcessService().getById(kitodoScriptTestProcessId);
+        ImportConfiguration importConfiguration = ServiceManager.getImportConfigurationService().getById(1);
+        assertEquals(importConfiguration, updatedProcess.getImportConfiguration(), "Import configuration was not set!");
+    }
+
+    /**
+     * Verifies that calling the KitodoScript 'resaveMetadataFile' fixes the structure of invalid METS files.
+     *
+     * @throws Exception when setting up test resources fails
+     */
+    @Test
+    public void shouldResaveAndFixInvalidMetsFile() throws Exception {
+        int testProcessId = MockDatabase.insertTestProcess("Invalid mets process", projectId, templateId, rulesetId);
+        invalidMetsStructureProcessIds.add(testProcessId);
+        ProcessTestUtils.copyTestMetadataFile(testProcessId, metadataFileInvalidMets);
+        Process testProcess = ServiceManager.getProcessService().getById(testProcessId);
+        URI processUri = ServiceManager.getProcessService().getMetadataFileUri(testProcess);
+
+        // Loading metadata file with invalid METS structure should fail
+        assertThrows(FileStructureValidationException.class, () -> ServiceManager.getMetsService().loadWorkpiece(processUri));
+
+        List<Process> processes = new ArrayList<>();
+        processes.add(testProcess);
+
+        // Skript to resave metadata file with valid METS structure
+        String script = "action:resaveMetadataFile";
+
+        ServiceManager.getKitodoScriptService().execute(processes, script);
+
+        // Loading metadata file with updated, valid METS structure should now succeed
+        assertDoesNotThrow(() -> ServiceManager.getMetsService().loadWorkpiece(processUri));
+    }
+
+    /**
+     * Verifies that calling the KitodoScript 'resaveMetadataFile' on a list of processes does not get interrupted when
+     * the metadata file of one process cannot be read.
+     *
+     * @throws Exception when setting up test resources fails
+     */
+    @Test
+    public void shouldNotStopResavingMetadataFilesWhenEncounteringProcessWithUnreadableMetadataFile() throws Exception {
+        int firstProcessId = MockDatabase.insertTestProcess("First invalid mets process", projectId, templateId, rulesetId);
+        ProcessTestUtils.copyTestMetadataFile(firstProcessId, metadataFileInvalidMets);
+        int secondProcessId = MockDatabase.insertTestProcess("Test process without metadata file", projectId, templateId, rulesetId);
+        int thirdProcessId = MockDatabase.insertTestProcess("Test process with malformed XML file", projectId, templateId, rulesetId);
+        ProcessTestUtils.copyTestMetadataFile(thirdProcessId, metadataFileMalformedXml);
+        int fourthProcessId = MockDatabase.insertTestProcess("Second invalid mets process", projectId, templateId, rulesetId);
+        ProcessTestUtils.copyTestMetadataFile(fourthProcessId, metadataFileInvalidMets);
+
+        invalidMetsStructureProcessIds.add(firstProcessId);
+        invalidMetsStructureProcessIds.add(secondProcessId);
+        invalidMetsStructureProcessIds.add(thirdProcessId);
+        invalidMetsStructureProcessIds.add(fourthProcessId);
+
+        List<Process> processes = new ArrayList<>();
+        processes.add(ServiceManager.getProcessService().getById(firstProcessId));
+        processes.add(ServiceManager.getProcessService().getById(secondProcessId));
+        processes.add(ServiceManager.getProcessService().getById(thirdProcessId));
+        processes.add(ServiceManager.getProcessService().getById(fourthProcessId));
+
+        URI firstProcessUri = ServiceManager.getProcessService().getMetadataFileUri(processes.get(0));
+        URI secondProcessUri = ServiceManager.getProcessService().getMetadataFileUri(processes.get(1));
+        URI thirdProcessUri = ServiceManager.getProcessService().getMetadataFileUri(processes.get(2));
+        URI fourthProcessUri = ServiceManager.getProcessService().getMetadataFileUri(processes.get(3));
+
+        // Trying to load test processes with invalid METS structures should result in validation exception
+        assertThrows(FileStructureValidationException.class, () -> ServiceManager.getMetsService().loadWorkpiece(firstProcessUri));
+        assertThrows(FileStructureValidationException.class, () -> ServiceManager.getMetsService().loadWorkpiece(fourthProcessUri));
+
+        // Trying to load test process without metadata file should result in IOException
+        assertThrows(IOException.class, () -> ServiceManager.getMetsService().loadWorkpiece(secondProcessUri));
+
+        // Trying to load test process with malformed XML file should result in SAXParseException
+        assertThrows(SAXParseException.class, () -> ServiceManager.getMetsService().loadWorkpiece(thirdProcessUri));
+
+        // Skript to resave metadata file with valid METS structure
+        String script = "action:resaveMetadataFile";
+
+        // Re-save all test processes with process missing metadata file entirely _between_ processes with invalid METS structure
+        ServiceManager.getKitodoScriptService().execute(processes, script);
+
+        // Loading updated metadata files of first _and_ third process should now be possible
+        assertDoesNotThrow(() -> ServiceManager.getMetsService().loadWorkpiece(firstProcessUri));
+        assertDoesNotThrow(() -> ServiceManager.getMetsService().loadWorkpiece(fourthProcessUri));
+
+        // Trying to load process without metadata file still results in IOException
+        assertThrows(IOException.class, () -> ServiceManager.getMetsService().loadWorkpiece(secondProcessUri));
+
+        // Trying to load process with malformed XML file still results in SAXParseException
+        assertThrows(SAXParseException.class, () -> ServiceManager.getMetsService().loadWorkpiece(thirdProcessUri));
     }
 }

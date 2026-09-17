@@ -26,7 +26,7 @@
               styleClass="editDialog">
         <h:form id="executeScriptSelectedForm">
             <p:panelGrid columns="1" layout="grid">
-                <p:row>
+
                     <h3>#{msgs.executeKitodoScript}</h3>
                     <h:panelGroup layout="block"
                                   styleClass="dialogFieldWrapper kitodoScript">
@@ -89,16 +89,22 @@
                                 <p:commandButton value="searchForMedia"
                                                  update="executeScriptSelectedForm:selectionScriptFieldTextArea"
                                                  onclick="document.getElementById('executeScriptSelectedForm:selectionScriptFieldTextArea').value='action:searchForMedia'"/>
+                                <p:commandButton value="resaveMetadataFile"
+                                                 update="executeScriptSelectedForm:selectionScriptFieldTextArea"
+                                                 onclick="document.getElementById('executeScriptSelectedForm:selectionScriptFieldTextArea').value='action:resaveMetadataFile'"/>
                                 <p:commandButton value="importProcesses"
                                                  update="executeScriptSelectedForm:selectionScriptFieldTextArea"
                                                  onclick="document.getElementById('executeScriptSelectedForm:selectionScriptFieldTextArea').value='action:importProcesses indir:/path/to/directory/ project:#id template:#id [errors:/path/to/directory/]'"/>
+                                <p:commandButton value="setImportConfiguration"
+                                                 update="executeScriptSelectedForm:selectionScriptFieldTextArea"
+                                                 onclick="document.getElementById('executeScriptSelectedForm:selectionScriptFieldTextArea').value='action:setImportConfiguration id:[VALUE]'"/>
                             </div>
 
                             <div>
                                 <p:outputLabel for="selectionScriptFieldTextArea"
                                                value="#{msgs.script}"/>
                                 <p:inputTextarea id="selectionScriptFieldTextArea"
-                                                 value="#{ProcessForm.kitodoScriptSelection}"
+                                                 value="#{ProcessListViewKitodoScriptDialog.kitodoScriptSelection}"
                                                  style="height: 65px; padding: 4px 8px;"
                                                  styleClass="input editDialog"/>
                             </div>
@@ -106,7 +112,7 @@
                     </h:panelGroup>
                     <h:panelGroup layout="block"
                                   styleClass="dialogButtonWrapper">
-                        <p:commandButton action="#{ProcessForm.executeKitodoScriptSelection}"
+                        <p:commandButton action="#{ProcessListViewKitodoScriptDialog.executeKitodoScriptSelection}"
                                          id="save"
                                          update="processesTabView:processesForm:processesTable,processCount"
                                          oncomplete="PF('executeScriptSelectedDialog').hide();"
@@ -121,7 +127,7 @@
                                          onclick="PF('executeScriptSelectedDialog').hide();">
                         </p:commandButton>
                     </h:panelGroup>
-                </p:row>
+
             </p:panelGrid>
         </h:form>
     </p:dialog>

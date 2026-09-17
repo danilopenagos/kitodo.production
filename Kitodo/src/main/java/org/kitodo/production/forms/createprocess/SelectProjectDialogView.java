@@ -18,9 +18,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import javax.faces.context.FacesContext;
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -40,7 +40,7 @@ public class SelectProjectDialogView implements Serializable {
     private int selectedProjectId = 0;
     private Template template;
     protected static final String ERROR_LOADING_ONE = "errorLoadingOne";
-    private static final String CREATE_PROCESS_PATH = "/pages/processFromTemplate.jsf?faces-redirect=true";
+    private static final String CREATE_PROCESS_PATH = "/pages/processFromTemplate?faces-redirect=true";
 
     /**
      * Get template.
@@ -85,8 +85,8 @@ public class SelectProjectDialogView implements Serializable {
      */
     public List<Project> getTemplateProjects() {
         try {
-            Template template = ServiceManager.getTemplateService().getById(this.template.getId());
-            return template.getProjects().stream().sorted(Comparator.comparing(Project::getTitle))
+            Template currentTemplate = ServiceManager.getTemplateService().getById(this.template.getId());
+            return currentTemplate.getProjects().stream().sorted(Comparator.comparing(Project::getTitle))
                     .filter(Project::isActive).collect(Collectors.toList());
         } catch (DAOException e) {
             Helper.setErrorMessage(ERROR_LOADING_ONE, new Object[] {ObjectType.TEMPLATE.getTranslationSingular(),
@@ -103,7 +103,7 @@ public class SelectProjectDialogView implements Serializable {
      */
     public void createProcessFromTemplate() {
         if (this.template.getProjects().size() == 1) {
-            this.selectedProjectId = this.template.getProjects().get(0).getId();
+            this.selectedProjectId = this.template.getProjects().getFirst().getId();
         }
         if (this.selectedProjectId > 0) {
             try {

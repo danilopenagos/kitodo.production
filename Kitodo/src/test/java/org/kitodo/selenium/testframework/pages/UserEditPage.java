@@ -14,6 +14,7 @@ package org.kitodo.selenium.testframework.pages;
 import static org.awaitility.Awaitility.await;
 import static org.kitodo.selenium.testframework.Browser.hoverWebElement;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -32,98 +33,104 @@ public class UserEditPage extends EditPage<UserEditPage> {
     private static final String USER_TAB_VIEW = EDIT_FORM + ":userTabView";
     private static final String CSS_SELECTOR_DROPDOWN_TRIGGER =  ".ui-selectonemenu-trigger";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW)
     private WebElement userEditTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":firstName")
     private WebElement firstNameInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":surname")
     private WebElement lastNameInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":login")
     private WebElement loginInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":password")
     private WebElement passwordInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":passwordValidation")
     private WebElement confirmPasswordInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":location")
     private WebElement locationInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":metaDataLanguage")
     private WebElement metadataLanguageSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":table-size")
     private WebElement tableSizeInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":languages")
     private WebElement languageSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":addRoleButton")
     private WebElement addUserToRoleButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":addProjectButton")
     private WebElement addUserToProjectButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = USER_TAB_VIEW + ":addClientButton")
     private WebElement addUserToClientButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "roleForm:selectRoleTable_data")
     private WebElement selectRoleTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "userProjectForm:selectProjectTable_data")
     private WebElement selectProjectTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "userClientForm:selectClientTable_data")
     private WebElement selectClientTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "addRoleDialog")
     private WebElement addToRoleDialog;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "addProjectDialog")
     private WebElement addToProjectDialog;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "addClientDialog")
     private WebElement addToClientDialog;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "user-menu")
     private WebElement userMenuButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(partialLinkText = "Benutzerdaten & Einstellungen")
     private WebElement userConfigButton;
 
     @FindBy(id = "editForm:userTabView:showPaginationPanelByDefault")
     private WebElement showPaginationByDefaultSwitch;
 
+    @FindBy(id = "editForm:userTabView:defaultPaginationType")
+    private WebElement defaultPaginationType;
+
+    @FindBy(id = "editForm:userTabView:showLogicalPageNumberBelowThumbnail")
+    private WebElement showLogicalPageNumberBelowThumbnailSwitch;
+
     @FindBy(id = "editForm:userTabView:showPhysicalPageNumberBelowThumbnail")
     private WebElement showPhysicalPageNumberBelowThumbnailSwitch;
 
     public UserEditPage() {
-        super("pages/userEdit.jsf");
+        super("pages/userEdit");
     }
 
     @Override
@@ -131,9 +138,9 @@ public class UserEditPage extends EditPage<UserEditPage> {
         return null;
     }
 
-    public UserEditPage insertUserData(User user) {
-        passwordInput.sendKeys(user.getPassword());
-        confirmPasswordInput.sendKeys(user.getPassword());
+    public UserEditPage insertUserData(User user, String password) {
+        passwordInput.sendKeys(password);
+        confirmPasswordInput.sendKeys(password);
         firstNameInput.sendKeys(user.getName());
         lastNameInput.sendKeys(user.getSurname());
         loginInput.sendKeys(user.getLogin());
@@ -141,7 +148,7 @@ public class UserEditPage extends EditPage<UserEditPage> {
         return this;
     }
 
-    public UsersPage save() throws IllegalAccessException, InstantiationException {
+    public UsersPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getUsersPage().getUrl());
         return Pages.getUsersPage();
     }
@@ -150,7 +157,7 @@ public class UserEditPage extends EditPage<UserEditPage> {
         switchToTabByIndex(TabIndex.USER_ROLES.getIndex());
         addUserToRoleButton.click();
 
-        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), 5);
+        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), Duration.ofSeconds(5));
         wait.until(ExpectedConditions.elementToBeClickable(By.id("roleForm:selectRoleTable:2:addRole")));
         List<WebElement> tableRows = Browser.getRowsOfTable(selectRoleTable);
         addRow(tableRows, roleTitle, addToRoleDialog);
@@ -161,7 +168,7 @@ public class UserEditPage extends EditPage<UserEditPage> {
         switchToTabByIndex(TabIndex.USER_CLIENT_LIST.getIndex());
         addUserToClientButton.click();
 
-        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), 5);
+        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), Duration.ofSeconds(5));
         wait.until(ExpectedConditions.elementToBeClickable(By.id("userClientForm:selectClientTable:1:addUserClient")));
 
         List<WebElement> tableRows = Browser.getRowsOfTable(selectClientTable);
@@ -173,7 +180,7 @@ public class UserEditPage extends EditPage<UserEditPage> {
         switchToTabByIndex(TabIndex.USER_PROJECT_LIST.getIndex());
         addUserToProjectButton.click();
 
-        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), 5);
+        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), Duration.ofSeconds(5));
         wait.until(ExpectedConditions.elementToBeClickable(By.id(selectProjectTable.getAttribute("id"))));
 
         List<WebElement> tableRows = Browser.getRowsOfTable(selectProjectTable);
@@ -213,6 +220,30 @@ public class UserEditPage extends EditPage<UserEditPage> {
         switchToTabByIndex(TabIndex.USER_METADATA_EDITOR_SETTINGS.getIndex());
         WebElement checkBox = showPhysicalPageNumberBelowThumbnailSwitch.findElement(By.className("ui-chkbox-box"));
         checkBox.click();
+        save();
+    }
+
+    /**
+     * Toggle the user setting that controls whether the logical page number is shown below a thumbnail in
+     * the metadata editor.
+     */
+    public void toggleShowLogicalPageNumberBelowThumbnail() throws Exception {
+        openUserConfig();
+        switchToTabByIndex(TabIndex.USER_METADATA_EDITOR_SETTINGS.getIndex());
+        WebElement checkBox = showLogicalPageNumberBelowThumbnailSwitch.findElement(By.className("ui-chkbox-box"));
+        checkBox.click();
+        save();
+    }
+
+
+    /**
+     * Select the default pagination type in the user setting that will be preselected in the metadata editor.
+     */
+    public void selectDefaultPaginationType() throws Exception {
+        openUserConfig();
+        switchToTabByIndex(TabIndex.USER_METADATA_EDITOR_SETTINGS.getIndex());
+        clickElement(defaultPaginationType.findElement(By.cssSelector(CSS_SELECTOR_DROPDOWN_TRIGGER)));
+        clickElement(Browser.getDriver().findElement(By.cssSelector("#editForm\\:userTabView\\:defaultPaginationType_items [data-label=\"Freitext\"]")));
         save();
     }
 

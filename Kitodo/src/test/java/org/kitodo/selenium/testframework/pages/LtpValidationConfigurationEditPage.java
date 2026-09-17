@@ -25,88 +25,89 @@ import org.openqa.selenium.support.ui.Select;
 public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationConfigurationEditPage> {
 
     private static final String TABVIEW = "editForm:ltpValidationConfigurationTabView";
+    private static final String VALUE = "value";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW)
     private WebElement tabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":detailsTab")
     private WebElement detailsTab;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":conditionsTab")
     private WebElement allConditionsTab;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":title")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":mimeType")
     private WebElement mimeTypeDropDown;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":mimeType_input")
     private WebElement mimeTypeSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":mimeType_label")
     private WebElement mimeTypeLabel;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":requireNoErrorToFinishTask_input")
     private WebElement requireNoErrorToFinishTaskCheckBox;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":requireNoErrorToFinishTask")
     private WebElement requireNoErrorToFinishTaskButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":requireNoErrorToUploadImage_input")
     private WebElement requireNoErrorToUploadImageCheckBox;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":requireNoErrorToUploadImage")
     private WebElement requireNoErrorToUploadImageButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleWellFormed")
     private WebElement simpleWellFormedDropDown;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleWellFormed_input")
     private WebElement simpleWellFormedSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleValid")
     private WebElement simpleValidDropDown;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleValid_input")
     private WebElement simpleValidSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleFilenamePattern")
     private WebElement simpleFilenamePatternInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleFilenamePatternSeverity")
     private WebElement simpleFilenamePatternSeverityDropDown;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":simpleFilenamePatternSeverity_input")
     private WebElement simpleFilenamePatternSeveritySelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":ltpValidationConditionsTable")
     private WebElement allConditionsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TABVIEW + ":addConditionButton")
     private WebElement addConditionButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "editForm:save")
     private WebElement saveButton;
 
@@ -114,7 +115,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * Initialize edit page for LTP validation configurations.
      */
     public LtpValidationConfigurationEditPage() {
-        super("pages/ltpValidationConfigurationEdit.jsf");
+        super("pages/ltpValidationConfigurationEdit");
     }
 
     /**
@@ -174,7 +175,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the title
      */
     public String getTitle() throws Exception {
-        return titleInput.getAttribute("value");
+        return titleInput.getAttribute(VALUE);
     }
 
     /**
@@ -192,10 +193,10 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
     /**
      * Return the currently selected mime type value (not label).
      * 
-     * @return the currrently selected mime type value (not label)
+     * @return the currently selected mime type value (not label)
      */
     public String getMimeType() throws Exception {
-        return new Select(mimeTypeSelect).getFirstSelectedOption().getAttribute("value");
+        return new Select(mimeTypeSelect).getFirstSelectedOption().getAttribute(VALUE);
     }
 
     /**
@@ -261,7 +262,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the selected option value (not label)
      */
     public String getSimpleWellFormedSeverity() throws Exception {
-        return new Select(simpleWellFormedSelect).getFirstSelectedOption().getAttribute("value");
+        return new Select(simpleWellFormedSelect).getFirstSelectedOption().getAttribute(VALUE);
     }
 
     /**
@@ -282,7 +283,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the selected option value (not label)
      */
     public String getSimpleValidSeverity() throws Exception {
-        return new Select(simpleValidSelect).getFirstSelectedOption().getAttribute("value");
+        return new Select(simpleValidSelect).getFirstSelectedOption().getAttribute(VALUE);
     }
 
     /**
@@ -302,7 +303,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the simple filename pattern
      */
     public String getFilenamePattern() throws Exception {
-        return simpleFilenamePatternInput.getAttribute("value");
+        return simpleFilenamePatternInput.getAttribute(VALUE);
     }
 
     /**
@@ -324,7 +325,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the selected option value (not label)
      */
     public String getSimpleFilenamePatternSeverity() throws Exception {
-        return new Select(simpleFilenamePatternSeveritySelect).getFirstSelectedOption().getAttribute("value");
+        return new Select(simpleFilenamePatternSeveritySelect).getFirstSelectedOption().getAttribute(VALUE);
     }
 
     /**
@@ -357,7 +358,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the property name of the condition in that row
      */
     public String getConditionProperty(int row) throws Exception {
-        return getPropertyInputForCondition(row).getAttribute("value");
+        return getPropertyInputForCondition(row).getAttribute(VALUE);
     }
 
     /**
@@ -394,7 +395,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      */
     public void clickRemoveConditionButton(int idx) throws Exception {
         int countBefore = getNumberOfValidationConditions();
-        allConditionsTable.findElements(By.tagName("tr")).get(idx + 1).findElements(By.tagName("a")).get(0).click();
+        allConditionsTable.findElements(By.tagName("tr")).get(idx + 1).findElements(By.tagName("a")).getFirst().click();
         Awaitility.await().until(() -> getNumberOfValidationConditions() == countBefore - 1);
     }
 
@@ -407,7 +408,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
      * @return the input element of the property column
      */
     private WebElement getPropertyInputForCondition(int row) {
-        return allConditionsTable.findElements(By.tagName("tr")).get(row + 1).findElements(By.tagName("td")).get(0)
+        return allConditionsTable.findElements(By.tagName("tr")).get(row + 1).findElements(By.tagName("td")).getFirst()
                 .findElement(By.tagName("input"));
     }
 
@@ -437,7 +438,7 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
         // check which item idx corresponds to value
         String selectId = dropDown.getAttribute("id") + "_input";
         List<WebElement> options = new Select(Browser.getDriver().findElement(By.id(selectId))).getOptions();
-        int idx = IntStream.range(0, options.size()).filter((i) -> value.equals(options.get(i).getAttribute("value")))
+        int idx = IntStream.range(0, options.size()).filter((i) -> value.equals(options.get(i).getAttribute(VALUE)))
                 .findFirst().orElse(-1);
 
         if (idx < 0) {
@@ -456,6 +457,6 @@ public class LtpValidationConfigurationEditPage extends EditPage<LtpValidationCo
 
         // wait until item was selected
         Awaitility.await().until(() -> new Select(Browser.getDriver().findElement(By.id(selectId)))
-                .getFirstSelectedOption().getAttribute("value").equals(value));
+                .getFirstSelectedOption().getAttribute(VALUE).equals(value));
     }
 }

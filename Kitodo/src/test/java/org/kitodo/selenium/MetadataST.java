@@ -44,6 +44,7 @@ import org.kitodo.selenium.testframework.Pages;
 import org.kitodo.selenium.testframework.pages.MetadataEditorPage;
 import org.kitodo.test.utils.ProcessTestUtils;
 import org.openqa.selenium.By;
+import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
 
@@ -53,12 +54,13 @@ import org.openqa.selenium.interactions.Actions;
 public class MetadataST extends BaseTestSelenium {
 
     private static final String TEST_MEDIA_REFERENCES_FILE = "testUpdatedMediaReferencesMeta.xml";
-    private static final String TEST_METADATA_LOCK_FILE = "testMetadataLockMeta.xml";
+    private static final String TEST_SIMPLE_METADATA_FILE = "testSimpleMetadata.xml";
     private static final String TEST_RENAME_MEDIA_FILE = "testRenameMediaMeta.xml";
     private static final String TEST_LINK_PAGE_TO_NEXT_DIVISION_MEDIA_FILE = "testLinkPageToNextDivisionMeta.xml";
     private static int mediaReferencesProcessId = -1;
     private static int metadataLockProcessId = -1;
     private static int parentProcessId = -1;
+    private static int firstChildId = -1;
     private static int renamingMediaProcessId = -1;
     private static int dragndropProcessId = -1;
     private static int createStructureAndDragndropProcessId = -1;
@@ -82,12 +84,13 @@ public class MetadataST extends BaseTestSelenium {
 
     private static void prepareMetadataLockProcess() throws DAOException, IOException {
         insertTestProcessForMetadataLockTest();
-        ProcessTestUtils.copyTestMetadataFile(metadataLockProcessId, TEST_METADATA_LOCK_FILE);
+        ProcessTestUtils.copyTestMetadataFile(metadataLockProcessId, TEST_SIMPLE_METADATA_FILE);
     }
 
     private static void prepareProcessHierarchyProcesses() throws DAOException, IOException {
         processHierarchyTestProcessIds = linkProcesses();
         copyTestParentProcessMetadataFile();
+        copyTestChildProcessMetadataFile();
         updateChildProcessIdsInParentProcessMetadataFile();
     }
 
@@ -153,7 +156,7 @@ public class MetadataST extends BaseTestSelenium {
     @Test
     public void removeMetadataLockTest() throws Exception {
         // Open process in metadata editor by default user to set metadata lock for this process and user
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.METADATA_LOCK_TEST_PROCESS_TITLE);
         Pages.getMetadataEditorPage().save();
         // Leave metadata editor without explicitly clicking the 'close' button
@@ -162,7 +165,7 @@ public class MetadataST extends BaseTestSelenium {
         Pages.getTopNavigation().logout();
         login("verylast");
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.METADATA_LOCK_TEST_PROCESS_TITLE);
-        assertTrue(Browser.getCurrentUrl().contains("metadataEditor.jsf"), "Unable to open metadata editor that was not closed by 'close' button");
+        assertTrue(Browser.getCurrentUrl().contains("metadataEditor"), "Unable to open metadata editor that was not closed by 'close' button");
     }
 
     /**
@@ -171,7 +174,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void changeProcessLinkOrderTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editParentProcessMetadata();
         assertTrue(Pages.getMetadataEditorPage().getNameOfFirstLinkedChildProcess().endsWith(FIRST_CHILD_PROCESS_TITLE), "Wrong initial order of linked child processes");
         assertTrue(Pages.getMetadataEditorPage().getSecondRootElementChildLabel().endsWith(SECOND_CHILD_PROCESS_TITLE), "Wrong initial order of linked child processes");
@@ -189,7 +192,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void toggleAllStructureNodesTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.METADATA_LOCK_TEST_PROCESS_TITLE);
         assertEquals(2, Pages.getMetadataEditorPage().getNumberOfDisplayedStructureElements(), "Number of visible nodes is wrong initially");
         Pages.getMetadataEditorPage().collapseAll();
@@ -203,7 +206,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void totalNumberOfScansTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         assertEquals("(3 Medien)", Pages.getMetadataEditorPage().getNumberOfScans(), "Total number of scans is not correct");
     }
@@ -214,7 +217,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void showPaginationByDefaultTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         assertFalse(Pages.getMetadataEditorPage().isPaginationPanelVisible());
         Pages.getMetadataEditorPage().closeEditor();
@@ -238,7 +241,7 @@ public class MetadataST extends BaseTestSelenium {
         String paginationScopeId = "paginationForm:selectPaginationScope";
         String paginationTypeId = "paginationForm:paginationTypeSelect";
         String secondTypeCssSelector = "#paginationForm\\:paginationTypeSelect_items li:nth-child(2)";
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         Browser.getDriver().findElement(By.id(paginationTogglerId)).click();
         // get current scope value
@@ -253,6 +256,7 @@ public class MetadataST extends BaseTestSelenium {
                 .until(Browser.getDriver().findElement(By.cssSelector(secondTypeCssSelector))::isDisplayed);
         Browser.getDriver().findElement(By.cssSelector(secondTypeCssSelector)).click();
         // verify that scope value did not change
+        Thread.sleep(300);
         await().ignoreExceptions().pollDelay(300, TimeUnit.MILLISECONDS).atMost(3, TimeUnit.SECONDS)
                 .until(Browser.getDriver().findElement(By.id(paginationScopeId))::isDisplayed);
         String scopeUpdated = Browser.getDriver().findElement(By.id(paginationScopeId)).getText();
@@ -265,8 +269,10 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void updateMediaReferencesTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_REFERENCES_TEST_PROCESS_TITLE);
+        await().ignoreExceptions().pollDelay(300, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+                .until(() -> Pages.getMetadataEditorPage().isFileReferencesUpdatedDialogVisible());
         assertTrue(Pages.getMetadataEditorPage()
                 .isFileReferencesUpdatedDialogVisible(), "Media references updated dialog not visible");
         Pages.getMetadataEditorPage().acknowledgeFileReferenceChanges();
@@ -279,7 +285,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void renameMediaFilesTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         assertEquals(FIRST_STRUCTURE_TREE_NODE_LABEL, Pages.getMetadataEditorPage().getSecondRootElementChildLabel(), "Second child node in structure tree has wrong label BEFORE renaming media files");
         Pages.getMetadataEditorPage().renameMedia();
@@ -296,7 +302,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void singleDragAndDropPageGalleryTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open metadata editor
         MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
@@ -377,7 +383,7 @@ public class MetadataST extends BaseTestSelenium {
     @Test
     @Disabled
     public void multiDragAndDropStructureTreeTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open metadata editor
         MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
@@ -398,7 +404,7 @@ public class MetadataST extends BaseTestSelenium {
         metaDataEditor.selectStructureTreeNode("0_2", true, false);
 
         // verify two images are selected in gallery and pagination panel
-        metaDataEditor.checkPaginationSelection(2);
+        metaDataEditor.checkLogicalSelection(2);
         metaDataEditor.checkGallerySelection(2);
 
         // drag and drop them to first drop position inside structure tree
@@ -409,7 +415,7 @@ public class MetadataST extends BaseTestSelenium {
         new Actions(Browser.getDriver()).dragAndDrop(dragElement, dropPosition).build().perform();
 
         // verify selection in gallery and pagination panel remains active after drag and drop
-        metaDataEditor.checkPaginationSelection(2);
+        metaDataEditor.checkLogicalSelection(2);
         metaDataEditor.checkGallerySelection(2);
 
         // page order should now be 1-3-2
@@ -459,21 +465,50 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void createStructureElementTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.CREATE_STRUCTURE_PROCESS_TITLE);
         WebElement createdStructure = Pages.getMetadataEditorPage().createStructureElement();
         assertEquals("Band", createdStructure.getText(), "Added structure element has wrong type!");
     }
 
     /**
+     * Verifies that gallery panel remains collapsed after creating structure element.
+     *
+     * @throws Exception when editing metadata or creating structure element fails.
+     */
+    @Test
+    public void keepCollapsedPanelStateOnStructureElementCreationTest() throws Exception {
+        login(KOWAL_USER);
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.CREATE_STRUCTURE_PROCESS_TITLE);
+        // verify that gallery is displayed by default
+        assertTrue(Browser.getDriver().findElement(By.id("imagePreviewForm")).isDisplayed());
+        WebElement thirdColumn = Browser.getDriver().findElement(By.id("thirdColumnWrapper"));
+        // verify that third column is visible
+        assertTrue(thirdColumn.isDisplayed(), "ThirdColumnWrapper should be visible");
+        // verify that column collapse button in third column is visible
+        WebElement collapseButton = thirdColumn.findElement(By.className("columnExpandButton"));
+        assertTrue(collapseButton.isDisplayed(), "Column collapse button should be visible");
+        // collapse gallery panel
+        collapseButton.click();
+        await().ignoreExceptions().pollDelay(300, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+                .until(() -> !Browser.getDriver().findElement(By.id("imagePreviewForm")).isDisplayed());
+        // verify that gallery is not displayed anymore
+        assertFalse(Browser.getDriver().findElement(By.id("imagePreviewForm")).isDisplayed());
+        // create structure element
+        Pages.getMetadataEditorPage().createStructureElement();
+        // verify that gallery panel is still collapsed after creating structure element
+        assertFalse(Browser.getDriver().findElement(By.id("imagePreviewForm")).isDisplayed());
+    }
+
+    /**
      * Verifies that moving media to newly created, but unsaved structure element in the gallery using drag'n'drop works
      * as expected.
      *
-     * @throws Exception when page nagivation fails
+     * @throws Exception when page navigation fails
      */
     @Test
     public void movePagesToUnsavedStructureTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.CREATE_STRUCTURE_AND_DRAG_N_DROP_TEST_PROCESS_TITLE);
         Pages.getMetadataEditorPage().createStructureElement();
         String dropId = "imagePreviewForm:structuredPages:1:structureElementDataList_content";
@@ -490,7 +525,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void saveLayoutTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         
@@ -538,13 +573,13 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void showPhysicalPageNumberBelowThumbnailTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
        
         // open the metadata editor
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
         
         // verify that physical page number is not shown below thumbnail by default
-        assertEquals(0, Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner")).size());
+        assertEquals(0, Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner.physical")).size());
 
         // change user setting
         Pages.getMetadataEditorPage().closeEditor();
@@ -552,7 +587,67 @@ public class MetadataST extends BaseTestSelenium {
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
 
         // verify physical page number is now shown below thumbnail
-        assertFalse(Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner")).isEmpty());
+        assertFalse(Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner.physical")).isEmpty());
+    }
+
+    /**
+     * Verifies that selecting a default pagination type in the user settings
+     * results in the correct option being preselected in the metadata editor.
+     */
+    @Test
+    public void selectDefaultPaginationTypeTest() throws Exception {
+        login(KOWAL_USER);
+
+        // open the metadata editor
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // open pagination panel if not visible
+        if (!Browser.getDriver().findElement(By.id("paginationPanel")).isDisplayed()) {
+            Browser.getDriver().findElement(By.id("secondSectionSecondColumnToggler")).click();
+        }
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(3, TimeUnit.SECONDS)
+                .until(() -> Browser.getDriver().findElement(By.id("paginationPanel")).isDisplayed());
+
+        // verify that "arabic" is preselected as the general default pagination type
+        assertEquals("alphabetisch", Browser.getDriver().findElement(By.cssSelector("#paginationForm\\:paginationTypeSelect_label")).getText());
+
+        // change user setting
+        Pages.getMetadataEditorPage().closeEditor();
+        Pages.getUserEditPage().selectDefaultPaginationType();
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // open pagination panel if not visible
+        if (!Browser.getDriver().findElement(By.id("paginationPanel")).isDisplayed()) {
+            Browser.getDriver().findElement(By.id("secondSectionSecondColumnToggler")).click();
+        }
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(3, TimeUnit.SECONDS)
+                .until(() -> Browser.getDriver().findElement(By.id("paginationPanel")).isDisplayed());
+
+        // verify that the logical page number is now shown below the thumbnail
+        assertEquals("Freitext", Browser.getDriver().findElement(By.cssSelector("#paginationForm\\:paginationTypeSelect_label")).getText());
+    }
+
+    /**
+     * Verifies that turning the "show logical page number below thumbnail switch" on in the user settings
+     * results in a thumbnail banner being displayed in the gallery of the metadata editor.
+     */
+    @Test
+    public void showLogicalPageNumberBelowThumbnailTest() throws Exception {
+        login(KOWAL_USER);
+
+        // open the metadata editor
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // verify that the logical page number is not shown below the thumbnail by default
+        assertEquals(0, Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner.logical")).size());
+
+        // change user setting
+        Pages.getMetadataEditorPage().closeEditor();
+        Pages.getUserEditPage().toggleShowLogicalPageNumberBelowThumbnail();
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // verify that the logical page number is now shown below the thumbnail
+        assertFalse(Browser.getDriver().findElements(By.cssSelector(".thumbnail-banner.logical")).isEmpty());
     }
 
     /** 
@@ -561,7 +656,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void selectStructureTreeTitleTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open the metadata editor
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
@@ -598,7 +693,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void linkPageToNextDivision() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open metadata editor
         Pages.getProcessesPage().goTo().editMetadata(LINK_PAGE_TO_NEXT_DIVISION_PROCESS_TITLE);
@@ -646,7 +741,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void linkPageToNextDivisionViaGalleryWhileMediaIsHiddenInStructureTreeTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open metadata editor
         Pages.getProcessesPage().goTo().editMetadata(LINK_PAGE_TO_NEXT_DIVISION_PROCESS_TITLE);
@@ -696,7 +791,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void focusRecentlyAddedMetadataRowTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open the metadata editor
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
@@ -752,12 +847,12 @@ public class MetadataST extends BaseTestSelenium {
     }
 
     /*
-     * Verifies that an image can be openend in a separate window by clicking on the corresponding 
+     * Verifies that an image can be opened in a separate window by clicking on the corresponding 
      * context menu item of the first logical tree node.
      */
     @Test
     public void openPageInSeparateWindowTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // remember current window handle
         String firstWindowHandle = Browser.getDriver().getWindowHandle();
@@ -804,7 +899,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void importMetadataDialogAppearsTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open the metadata editor
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
@@ -850,7 +945,7 @@ public class MetadataST extends BaseTestSelenium {
      */
     @Test
     public void multiSelectInLogicalStructureTreeTest() throws Exception {
-        login("kowal");
+        login(KOWAL_USER);
 
         // open metadata editor
         Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
@@ -858,16 +953,16 @@ public class MetadataST extends BaseTestSelenium {
         // wait until logical structure tree is available
         MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
         await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
-            .until(() -> Browser.getDriver().findElement(By.id("logicalTree")).isDisplayed());
+                .until(() -> Browser.getDriver().findElement(By.id("logicalTree")).isDisplayed());
 
         // select first page
         metaDataEditor.selectStructureTreeNode("0_0", false, false);
 
         // verify metadata shows of first page is displayed
         await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
-            .until(() -> Browser.getDriver().findElement(
-                By.id("metadataAccordion:metadata:metadataTable:0:inputText")
-            ).getAttribute("value").equals("-"));
+                .until(() -> Browser.getDriver().findElement(
+                        By.id("metadataAccordion:metadata:metadataTable:0:inputText")
+                ).getAttribute("value").equals("-"));
 
         // select second page with ctrl
         metaDataEditor.selectStructureTreeNode("0_1", true, false);
@@ -876,10 +971,10 @@ public class MetadataST extends BaseTestSelenium {
         await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
             .until(() -> Browser.getDriver().findElement(
                 By.id("metadataAccordion:metadata:metadataTable")
-            ).getText().equals("No records found."));
-        
+            ).getText().equals("Keine Datensätze gefunden."));
+
         // verify both pages are selected in pagination panel
-        metaDataEditor.checkPaginationSelection(2);
+        metaDataEditor.checkLogicalSelection(2);
 
         // verify both pages are selected in gallery
         metaDataEditor.checkGallerySelection(2);
@@ -891,10 +986,159 @@ public class MetadataST extends BaseTestSelenium {
         metaDataEditor.selectStructureTreeNode("0_0", false, true);
 
         // verify all pages are selected in pagination panel
-        metaDataEditor.checkPaginationSelection(3);
+        metaDataEditor.checkLogicalSelection(3);
 
         // verify all pages are selected in gallery
         metaDataEditor.checkGallerySelection(3);
+    }
+
+    /*
+     * Checks that multiple elements can be selected in the logical structure tree using the
+     * ctrl and shift keys. Verifies that selection is applied to pagination panel and gallery.
+     */
+    @Test
+    public void selectAssignedMediaTest() throws Exception {
+        login(KOWAL_USER);
+
+        // open metadata editor
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // wait until logical structure tree is available
+        MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElement(By.id("logicalTree")).isDisplayed());
+
+        // select parent element
+        metaDataEditor.selectStructureTreeNode("0", false, false);
+
+        // open context menu
+        metaDataEditor.openContextMenuForStructureTreeNode("0");
+
+        // click on 2nd menu entry "assign to next element"
+        metaDataEditor.clickStructureTreeContextMenuEntry("selectAssignedMedia");
+
+        // verify both pages are selected in pagination panel
+        metaDataEditor.checkLogicalSelection(3);
+
+        // verify both pages are selected in gallery
+        metaDataEditor.checkGallerySelection(3);
+    }
+
+    /**
+     * Verifies that user can edit metadata of linked process using context menu in metadata editor.
+     */
+    @Test
+    public void editLinkedProcessMetadataTest() throws Exception {
+        login(KOWAL_USER);
+        Pages.getProcessesPage().goTo().editParentProcessMetadata();
+        WebDriver webDriver = Browser.getDriver();
+
+        // make sure we are in the correct parent process
+        String headerText = webDriver.findElement(By.id("headerText")).getText();
+        assertTrue(headerText.startsWith(PARENT_PROCESS_TITLE));
+
+        // open context menu of first linked child process
+        Pages.getMetadataEditorPage().openContextMenuForLinkedChildProcessById(firstChildId);
+
+        // wait for context menu to be displayed
+        pollAssertTrue(() -> Browser.getDriver().findElement(By.id("contextMenuLogicalTree")).isDisplayed());
+
+        // click option to edit metadata of linked process
+        Pages.getMetadataEditorPage().clickStructureTreeContextMenuEntry("editLinkedMetadata");
+
+        // verify that header now shows title of linked child process
+        headerText = webDriver.findElement(By.id("headerText")).getText();
+        assertTrue(headerText.startsWith(FIRST_CHILD_PROCESS_TITLE));
+    }
+
+    /**
+     * Verify that a media element can be deleted via the context menu option "delete media".
+     */
+    @Test
+    public void mediaCanBeRemovedTest() throws Exception {
+        login(KOWAL_USER);
+
+        // open metadata editor
+        Pages.getProcessesPage().goTo().editMetadata(MockDatabase.MEDIA_RENAMING_TEST_PROCESS_TITLE);
+
+        // wait until logical structure tree is available
+        MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElement(By.id("logicalTree")).isDisplayed());
+
+        // page order is 2-1-3
+
+        // check first media node is page 2
+        assertEquals("2 : -", 
+            Browser.getDriver().findElement(By.cssSelector("#logicalTree\\:0_0 .ui-treenode-label")).getText());
+
+        // select page 2 media element
+        metaDataEditor.selectStructureTreeNode("0_0", false, false);
+
+        // open context menu
+        metaDataEditor.openContextMenuForStructureTreeNode("0_0");
+
+        // click on menu entry "delete media"
+        metaDataEditor.clickStructureTreeContextMenuEntry("removeSelectedMedia");
+
+        // check that first media has changed to page 1
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElement(
+                By.cssSelector("#logicalTree\\:0_0 .ui-treenode-label")
+            ).getText().equals("1 : -"));
+    }
+
+    /**
+     * Verify that a media element can be deleted via the context menu option "delete media" after deleting its parent logical division.
+     */
+    @Test
+    public void mediaCanBeRemovedAfterDeletingParentLogicalDivisionTest() throws Exception {
+        login(KOWAL_USER);
+
+        // open metadata editor
+        Pages.getProcessesPage().goTo().editMetadata(LINK_PAGE_TO_NEXT_DIVISION_PROCESS_TITLE);
+
+        // wait until logical structure tree is available
+        MetadataEditorPage metaDataEditor = Pages.getMetadataEditorPage();
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElement(By.id("logicalTree")).isDisplayed());
+
+        // check media 2 exists in tree structure at "Band -> Band -> Band -> 2"
+        assertEquals("2 : -", 
+            Browser.getDriver().findElement(By.cssSelector("#logicalTree\\:0_0_0_0 .ui-treenode-label")).getText());
+
+        // check parent logical structure is called "Band"
+        assertEquals("Band", 
+            Browser.getDriver().findElement(By.cssSelector("#logicalTree\\:0_0_0 .ui-treenode-label")).getText());
+
+        // select parent logical structure of media 2
+        metaDataEditor.selectStructureTreeNode("0_0_0", false, false);
+
+        // open context menu
+        metaDataEditor.openContextMenuForStructureTreeNode("0_0_0");
+
+        // click on menu entry "remove element"
+        metaDataEditor.clickStructureTreeContextMenuEntry("unlink-process");
+
+        // check media 2 exists now as child of "Band -> Band"
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElement(
+                By.cssSelector("#logicalTree\\:0_0_0 .ui-treenode-label")
+            ).getText().equals("2 : -"));
+
+        // select media 2
+        metaDataEditor.selectStructureTreeNode("0_0_0", false, false);
+
+        // open context menu
+        metaDataEditor.openContextMenuForStructureTreeNode("0_0_0");
+
+        // click on menu entry "delete media"
+        metaDataEditor.clickStructureTreeContextMenuEntry("removeSelectedMedia");
+
+        // check that media 2 tree node does not exist any more
+        await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
+            .until(() -> Browser.getDriver().findElements(By.cssSelector("#logicalTree .ui-treenode-label"))
+                    .stream().filter(e -> e.getText().equals("2 : -")).findFirst().isEmpty());
     }
 
     /**
@@ -913,7 +1157,7 @@ public class MetadataST extends BaseTestSelenium {
      * @throws IOException when deleting test files fails.
      */
     @AfterAll
-    public static void cleanup() throws DAOException, IOException {
+    public static void cleanup() throws Exception {
         for (int processId : processHierarchyTestProcessIds) {
             ProcessService.deleteProcess(processId);
         }
@@ -926,9 +1170,9 @@ public class MetadataST extends BaseTestSelenium {
         ProcessService.deleteProcess(linkPageToNextDivisionProcessId);
     }
 
-    private void login(String username) throws InstantiationException, IllegalAccessException, InterruptedException {
+    private void login(String username) throws ReflectiveOperationException, InterruptedException {
         User metadataUser = ServiceManager.getUserService().getByLogin(username);
-        Pages.getLoginPage().goTo().performLogin(metadataUser);
+        Pages.getLoginPage().goTo().performLogin(metadataUser, MockDatabase.DEFAULT_USER_PASSWORD);
     }
 
     private static void insertTestProcessForMediaReferencesTest() throws DAOException {
@@ -1000,6 +1244,12 @@ public class MetadataST extends BaseTestSelenium {
 
     private static void copyTestParentProcessMetadataFile() throws IOException, DAOException {
         ProcessTestUtils.copyTestMetadataFile(parentProcessId, TEST_PARENT_PROCESS_METADATA_FILE);
+    }
+
+    private static void copyTestChildProcessMetadataFile() throws IOException, DAOException {
+        Process parentProcess = ServiceManager.getProcessService().getById(parentProcessId);
+        firstChildId = parentProcess.getChildren().getFirst().getId();
+        ProcessTestUtils.copyTestMetadataFile(firstChildId, TEST_SIMPLE_METADATA_FILE);
     }
 
     private static void updateChildProcessIdsInParentProcessMetadataFile() throws IOException, DAOException {

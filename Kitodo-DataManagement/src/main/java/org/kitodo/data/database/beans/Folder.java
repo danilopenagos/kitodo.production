@@ -19,15 +19,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.ForeignKey;
-import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
-import javax.persistence.Transient;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import org.kitodo.api.imagemanagement.ImageManagementInterface;
 import org.kitodo.config.ConfigMain;
@@ -118,7 +118,7 @@ public class Folder extends BaseBean {
      * Indicates whether a METS {@code <fileGrp>} section is created, and how it
      * is populated.
      */
-    @Column(name = "linkingMode")
+    @Column(name = "linkingMode", columnDefinition = "VARCHAR")
     @Enumerated(EnumType.STRING)
     private LinkingMode linkingMode = LinkingMode.ALL;
 
@@ -205,12 +205,8 @@ public class Folder extends BaseBean {
      *
      * @return the pre-defined entries for the combo box
      */
-    public Collection<String> getFileGroups() {
-        Collection<String> fileGroups = new TreeSet<>(DFG_VIEWER_FILEGRPS);
-        if (Objects.nonNull(fileGroup)) {
-            fileGroups.add(this.fileGroup);
-        }
-        return fileGroups;
+    public static Collection<String> getDefaultFileGroups() {
+        return new TreeSet<>(DFG_VIEWER_FILEGRPS);
     }
 
     /**
@@ -458,6 +454,18 @@ public class Folder extends BaseBean {
      */
     public void setLtpValidationConfiguration(LtpValidationConfiguration ltpValidationConfiguration) {
         this.ltpValidationConfiguration = ltpValidationConfiguration;
+    }
+
+    /**
+     * Returns whether image generation is configured for this folder.
+     *
+     * @return whether image generation is configured
+     */
+    @Transient
+    public boolean isGeneratedImageFolder() {
+        return Objects.nonNull(derivative)
+                || Objects.nonNull(dpi)
+                || Objects.nonNull(imageSize);
     }
 
     @Override

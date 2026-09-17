@@ -32,13 +32,13 @@ public class StructurePanelIT {
         Process child = new Process();
         child.setId(42);
         child.setParent(parent);
-        DefaultTreeNode result = new DefaultTreeNode();
+        DefaultTreeNode<Object> result = new DefaultTreeNode();
 
         Method addParentLinksRecursive = StructurePanel.class.getDeclaredMethod("addParentLinksRecursive",
             Process.class, DefaultTreeNode.class);
         addParentLinksRecursive.setAccessible(true);
         addParentLinksRecursive.invoke(underTest, child, result);
 
-        assertTrue(((StructureTreeNode) result.getChildren().get(0).getData()).isLinked());
+        assertTrue(((StructureTreeNode) result.getChildren().getFirst().getData()).isLinked());
     }
 }

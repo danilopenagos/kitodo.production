@@ -38,6 +38,7 @@ import org.kitodo.api.dataeditor.rulesetmanagement.StructuralElementViewInterfac
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
 import org.kitodo.data.database.beans.Process;
+import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.production.forms.createprocess.ProcessDetail;
 import org.kitodo.production.forms.createprocess.ProcessFieldedMetadata;
@@ -48,6 +49,7 @@ import org.kitodo.production.model.bibliography.course.metadata.CountableMetadat
 import org.kitodo.production.model.bibliography.course.metadata.MetadataEditMode;
 import org.kitodo.production.security.SecurityUserDetails;
 import org.kitodo.production.services.ServiceManager;
+import org.kitodo.production.services.data.ProcessService;
 
 public class CalendarService {
 
@@ -88,11 +90,11 @@ public class CalendarService {
         ruleset.load(new File(rulesetFullPath));
 
         // get the user’s metadata language
-        SecurityUserDetails authenticatedUser = ServiceManager.getUserService().getAuthenticatedUser();
-        List<Locale.LanguageRange> priorityList = Locale.LanguageRange.parse(authenticatedUser.getMetadataLanguage());
+        User user = ServiceManager.getUserService().getCurrentUser();
+        List<Locale.LanguageRange> priorityList = Locale.LanguageRange.parse(user.getMetadataLanguage());
 
         // get the basic rule set type of the newspaper
-        String newspaperType = ServiceManager.getProcessService().getBaseType(completeEdition.getId());
+        String newspaperType = ProcessService.getBaseType(completeEdition);
 
         // descend to the issue
         StructuralElementViewInterface newspaperView = ruleset.getStructuralElementView(newspaperType, CREATE, priorityList);

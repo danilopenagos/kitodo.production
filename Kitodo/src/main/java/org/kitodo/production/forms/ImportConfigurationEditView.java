@@ -11,6 +11,7 @@
 
 package org.kitodo.production.forms;
 
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -20,9 +21,9 @@ import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import javax.faces.model.SelectItem;
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
+import jakarta.faces.model.SelectItem;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,7 +45,9 @@ import org.primefaces.model.DualListModel;
 
 @Named
 @ViewScoped
-public class ImportConfigurationEditView extends BaseForm {
+public class ImportConfigurationEditView extends BaseEditView {
+
+    public static final String VIEW_PATH = MessageFormat.format(REDIRECT_PATH, "importConfigurationEdit");
 
     private static final Logger logger = LogManager.getLogger(ImportConfigurationEditView.class);
     private ImportConfiguration importConfiguration = new ImportConfiguration();
@@ -122,7 +125,7 @@ public class ImportConfigurationEditView extends BaseForm {
     public String save() {
         try {
             ServiceManager.getImportConfigurationService().save(importConfiguration);
-            return projectsPage;
+            return ImportConfigurationListView.VIEW_PATH +  "&" + getReferrerListOptions();
         } catch (DAOException e) {
             Helper.setErrorMessage(ERROR_SAVING,
                     new Object[] {ObjectType.IMPORT_CONFIGURATION.getTranslationSingular()}, logger, e);
@@ -199,7 +202,7 @@ public class ImportConfigurationEditView extends BaseForm {
      * @param searchField SearchField
      */
     public void addSearchField(SearchField searchField) {
-        if (importConfiguration.getSearchFields().stream().map(SearchField::getLabel).collect(Collectors.toList())
+        if (importConfiguration.getSearchFields().stream().map(SearchField::getLabel).toList()
                 .contains(searchField.getLabel())) {
             Helper.setErrorMessage("SearchField labels must be unique ('" + searchField.getLabel()
                     + "' already exists!)");
@@ -237,7 +240,7 @@ public class ImportConfigurationEditView extends BaseForm {
      */
     public void addUrlParameter(UrlParameter urlParameter) {
         if (importConfiguration.getUrlParameters().stream().map(UrlParameter::getParameterKey)
-                .collect(Collectors.toList()).contains(urlParameter.getParameterKey())) {
+                .toList().contains(urlParameter.getParameterKey())) {
             Helper.setErrorMessage(URL_PARAMETER_UNIQUE, new Object[]{urlParameter.getParameterKey()});
         } else {
             urlParameter.setImportConfiguration(importConfiguration);

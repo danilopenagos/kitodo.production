@@ -50,7 +50,7 @@ public class LtpValidationConfigurationService
     }
 
     /**
-     * Return a ltp validation configuration for a specific id but also load the list of attched folders,
+     * Return a ltp validation configuration for a specific id but also load the list of attached folders,
      * which is not loaded by default due to the lazy fetch strategy.
      * 
      * @param id the id of the validation configuration that is supposed to be loaded
@@ -65,7 +65,7 @@ public class LtpValidationConfigurationService
         if (results.size() != 1) {
             throw new DAOException("Unable to find ltp validation configuration object with ID " + id + "!");
         }
-        return results.get(0);
+        return results.getFirst();
     }
 
     /**

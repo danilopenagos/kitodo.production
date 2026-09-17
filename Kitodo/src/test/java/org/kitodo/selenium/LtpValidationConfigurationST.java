@@ -18,8 +18,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.kitodo.data.database.beans.User;
-import org.kitodo.production.services.ServiceManager;
 import org.kitodo.selenium.testframework.BaseTestSelenium;
 import org.kitodo.selenium.testframework.Browser;
 import org.kitodo.selenium.testframework.Pages;
@@ -39,8 +37,7 @@ public class LtpValidationConfigurationST extends BaseTestSelenium {
      */
     @BeforeEach
     public void doLogin() throws Exception {
-        User metadataUser = ServiceManager.getUserService().getByLogin("kowal");
-        Pages.getLoginPage().goTo().performLogin(metadataUser);
+        Pages.getLoginPage().goTo().performLoginAsAdmin();
     }
 
     /**
@@ -88,7 +85,7 @@ public class LtpValidationConfigurationST extends BaseTestSelenium {
 
         // click on edit button of first ltp validation configuration
         Browser.getDriver()
-                .findElementById("ltpValidationConfigurationsTable:0:actionForm:editLtpValidationConfiguration")
+                .findElement(By.id("ltpValidationConfigurationsTable:0:actionForm:editLtpValidationConfiguration"))
                 .click();
         pollAssertTrue(() -> Pages.getLtpValidationConfigurationEditPage().isDisplayed());
 
@@ -145,7 +142,7 @@ public class LtpValidationConfigurationST extends BaseTestSelenium {
 
         // click edit button of newly created configuration
         Browser.getDriver()
-                .findElementById("ltpValidationConfigurationsTable:1:actionForm:editLtpValidationConfiguration")
+                .findElement(By.id("ltpValidationConfigurationsTable:1:actionForm:editLtpValidationConfiguration"))
                 .click();
         pollAssertTrue(() -> Pages.getLtpValidationConfigurationEditPage().isDisplayed());
 
@@ -173,7 +170,7 @@ public class LtpValidationConfigurationST extends BaseTestSelenium {
         // delete newly created ltp configuration
         Pages.getProjectsPage().goTo().goToLtpValidationConfigurationsTab();
         Browser.getDriver()
-                .findElementById("ltpValidationConfigurationsTable:1:actionForm:deleteLtpValidationConfiguration")
+                .findElement(By.id("ltpValidationConfigurationsTable:1:actionForm:deleteLtpValidationConfiguration"))
                 .click();
         pollAssertTrue(() -> Browser.getDriver().findElement(By.id("deleteConfirmDialog_content")).getText()
                 .contains("Wellformed Gif"));
@@ -235,6 +232,6 @@ public class LtpValidationConfigurationST extends BaseTestSelenium {
      * projects page.
      */
     private WebElement getLtpValidationConfigurationTable() {
-        return Browser.getDriver().findElementById(LTP_VALIDATION_CONFIGURATION_TABLE_ID);
+        return Browser.getDriver().findElement(By.id(LTP_VALIDATION_CONFIGURATION_TABLE_ID));
     }
 }

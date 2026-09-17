@@ -18,26 +18,44 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.hibernate.Session;
+import org.hibernate.search.mapper.orm.Search;
+import org.hibernate.search.mapper.orm.massindexing.MassIndexer;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.TestInfo;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.kitodo.ExecutionPermission;
 import org.kitodo.FileLoader;
 import org.kitodo.MockDatabase;
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
+import org.kitodo.data.database.beans.Process;
+import org.kitodo.data.database.persistence.HibernateUtil;
+import org.kitodo.selenium.testframework.helper.ScreenshotTestWatcher;
 
 import static org.awaitility.Awaitility.await;
 
+@ExtendWith(ScreenshotTestWatcher.class)
 public class BaseTestSelenium {
 
     private static final Logger logger = LogManager.getLogger(BaseTestSelenium.class);
     private static final File usersDirectory = new File("src/test/resources/users");
+    protected static final String KOWAL_USER = "kowal";
 
     @BeforeAll
     public static void setUp() throws Exception {
         MockDatabase.startNode();
         MockDatabase.insertProcessesFull();
         MockDatabase.startDatabaseServer();
+
+        try (Session ormSession = HibernateUtil.getSession()) {
+            MassIndexer massIndexer = Search.session(ormSession).massIndexer(Process.class);
+            massIndexer.dropAndCreateSchemaOnStart(true);
+            massIndexer.startAndWait();
+        }
 
         usersDirectory.mkdir();
 
@@ -74,9 +92,27 @@ public class BaseTestSelenium {
 
         usersDirectory.delete();
 
-        MockDatabase.stopNode();
+        // The search server node is not stopped here, but kept running across
+        // all selenium test classes, because the Tomcat application would keep
+        // stale connections to a restarted index server and the first index
+        // query of every test class would stall. The node is stopped when the
+        // JVM terminates, so it is kept only within this surefire execution.
         MockDatabase.stopDatabaseServer();
         MockDatabase.cleanDatabase();
+    }
+
+    @BeforeEach
+    public void debugLogBefore(TestInfo testInfo) {
+        String className = testInfo.getTestClass().get().getSimpleName();
+        String methodName = testInfo.getTestMethod().get().getName();
+        logger.debug("execute test: {}#{}", className, methodName);
+    }
+
+    @AfterEach
+    public void debugLogAfter(TestInfo testInfo) {
+        String className = testInfo.getTestClass().get().getSimpleName();
+        String methodName = testInfo.getTestMethod().get().getName();
+        logger.debug("finished test: {}#{}", className, methodName);
     }
 
     protected void pollAssertTrue(Callable<Boolean> conditionEvaluator) {

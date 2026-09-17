@@ -16,12 +16,13 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.faces.model.SelectItem;
-import javax.faces.model.SelectItemGroup;
+import jakarta.faces.model.SelectItem;
+import jakarta.faces.model.SelectItemGroup;
 
 import org.apache.commons.lang3.StringUtils;
 import org.kitodo.data.database.beans.Client;
@@ -29,6 +30,7 @@ import org.kitodo.data.database.beans.ListColumn;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.data.database.persistence.ListColumnDAO;
 import org.kitodo.production.helper.Helper;
+import org.kitodo.production.helper.LocaleHelper;
 import org.kitodo.production.services.ServiceManager;
 import org.primefaces.model.SortOrder;
 
@@ -88,11 +90,12 @@ public class ListColumnService extends BaseBeanService<ListColumn, ListColumnDAO
      */
     public SelectItemGroup getListColumnsForListAsSelectItemGroup(String listTitle) throws DAOException {
         SelectItemGroup itemGroup = new SelectItemGroup(Helper.getTranslation(listTitle));
+        Locale currentLocale = LocaleHelper.getCurrentLocale();
 
         itemGroup.setSelectItems(getAll().stream()
                 .filter(listColumn -> listColumn.getTitle().startsWith(listTitle + "."))
                 .map(listColumn -> new SelectItem(listColumn,
-                        Helper.getTranslation(listColumn.getTitle().replace(listTitle + ".", ""))))
+                        Helper.getString(currentLocale, listColumn.getTitle().replace(listTitle + ".", ""))))
                 .toArray(SelectItem[]::new));
 
         return itemGroup;
@@ -180,7 +183,7 @@ public class ListColumnService extends BaseBeanService<ListColumn, ListColumnDAO
         // don't remove columns whose titles are in the given excludeList
         List<ListColumn> customColumns = dao.getAllCustom().stream()
                 .filter(column -> !excludeList.contains(column.getTitle()))
-                .collect(Collectors.toList());
+                .toList();
 
         // remove remaining custom columns from clients
         for (Client client : ServiceManager.getClientService().getAll()) {
@@ -193,7 +196,7 @@ public class ListColumnService extends BaseBeanService<ListColumn, ListColumnDAO
         // remove custom columns themselves
         List<Integer> columnIds = customColumns.stream()
                 .map(ListColumn::getId)
-                .collect(Collectors.toList());
+                .toList();
         for (int id : columnIds) {
             remove(id);
         }

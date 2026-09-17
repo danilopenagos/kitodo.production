@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.DirectoryStream;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -37,8 +36,8 @@ import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
-import javax.faces.context.FacesContext;
-import javax.servlet.http.HttpSession;
+import jakarta.faces.context.FacesContext;
+import jakarta.servlet.http.HttpSession;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -80,8 +79,7 @@ public class KitodoServiceLoader<T> {
     private static final String JAR = "*.jar";
     private static final String ERROR = "Classpath could not be accessed";
 
-    private static final Path SYSTEM_TEMP_FOLDER = FileSystems.getDefault()
-            .getPath(System.getProperty("java.io.tmpdir"));
+    private static final Path SYSTEM_TEMP_FOLDER = Paths.get(System.getProperty("java.io.tmpdir"));
 
     private static final Logger logger = LogManager.getLogger(KitodoServiceLoader.class);
 
@@ -142,13 +140,13 @@ public class KitodoServiceLoader<T> {
      * they can be used in all frontend files
      */
     private void loadBeans() {
-        Path moduleFolder = FileSystems.getDefault().getPath(modulePath);
+        Path moduleFolder = Paths.get(modulePath);
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(moduleFolder, JAR)) {
             for (Path f : stream) {
                 try (JarFile jarFile = new JarFile(f.toString())) {
                     if (hasFrontendFiles(jarFile)) {
                         Enumeration<JarEntry> entries = jarFile.entries();
-                        URL[] urls = {new URL("jar:file:" + f + "!/") };
+                        URL[] urls = {Paths.get("jar:file:" + f + "!/").toUri().toURL() };
                         try (URLClassLoader cl = URLClassLoader.newInstance(urls)) {
                             while (entries.hasMoreElements()) {
                                 JarEntry je = entries.nextElement();
@@ -197,7 +195,7 @@ public class KitodoServiceLoader<T> {
      */
     private void loadFrontendFilesIntoCore() {
 
-        Path moduleFolder = FileSystems.getDefault().getPath(modulePath);
+        Path moduleFolder = Paths.get(modulePath);
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(moduleFolder, JAR)) {
 
@@ -382,7 +380,7 @@ public class KitodoServiceLoader<T> {
      * earlier class loader created at an earlier time.</p>
      */
     private void loadModulesIntoClasspath() {
-        Path moduleFolder = FileSystems.getDefault().getPath(modulePath);
+        Path moduleFolder = Paths.get(modulePath);
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(moduleFolder, JAR)) {
 
@@ -403,7 +401,7 @@ public class KitodoServiceLoader<T> {
             if (!jarsToBeAdded.isEmpty()) {
 
                 for (URL url : jarsToBeAdded) {
-                    logger.info("Loading module jar file from path " + url.toString());
+                    logger.info("Loading module jar file from path {}", url.toString());
                     KitodoServiceLoader.loadedJars.add(url.toString());
                 }
                 URL[] urls = new URL[jarsToBeAdded.size()];

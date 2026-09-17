@@ -35,13 +35,7 @@ public enum FunctionalMetadata {
      * creation. The value is the current number of children of the parent
      * process plus one, i.e. it creates a one-based counting.
      */
-    CHILD_COUND("childCount"),
-
-    /**
-     * The name of the data source from which the record was imported. This is
-     * saved for later comparison of the data records.
-     */
-    DATA_SOURCE("dataSource"),
+    CHILD_COUNT("childCount"),
 
     /**
      * Display metadata as summary on Title Record Link tab when creating a new

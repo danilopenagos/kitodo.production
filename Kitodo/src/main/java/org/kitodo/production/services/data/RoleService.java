@@ -79,16 +79,6 @@ public class RoleService extends BaseBeanService<Role, RoleDAO> {
         return 0L;
     }
 
-    /**
-     * Get list of all objects for selected client from database.
-     *
-     * @return list of all objects for selected client from database
-     */
-    public List<Role> getAllForSelectedClient() {
-        return dao.getByQuery("SELECT r FROM Role AS r INNER JOIN r.client AS c WITH c.id = :clientId",
-            Collections.singletonMap(CLIENT_ID, ServiceManager.getUserService().getSessionClientId()));
-    }
-
     @Override
     @SuppressWarnings("unchecked")
     public List<Role> loadData(int first, int pageSize, String sortField, SortOrder sortOrder, Map filters) {
@@ -128,8 +118,8 @@ public class RoleService extends BaseBeanService<Role, RoleDAO> {
     }
 
     @Override
-    public void refresh(Role role) {
-        dao.refresh(role);
+    public void refresh(Role baseBean) {
+        super.refresh(baseBean);
     }
 
     /**
@@ -173,18 +163,25 @@ public class RoleService extends BaseBeanService<Role, RoleDAO> {
                     .collect(Collectors.joining(COMMA_DELIMITER));
         }
     }
-
+    
     /**
-     * Get number of roles of session client of currently authenticated user.
-     *
-     * @return number of roles assigned to session client of currently authenticated user
-     *
-     * @throws DAOException when retrieving number of roles from database fails
+     * Remove a role by disassociating any remaining users and authorities from it and deleting it from the database.
+     * 
+     * @param role the role to be removed
      */
-    public int getNumberOfRolesOfCurrentClient() throws DAOException {
-        Client currentSessionClient = ServiceManager.getUserService().getSessionClientOfAuthenticatedUser();
-        return (int) ServiceManager.getRoleService().getAll().stream()
-                .filter(role -> role.getClient().equals(currentSessionClient)).count();
-
+    @Override
+    public void remove(Role role) throws DAOException {
+        if (!role.getUsers().isEmpty()) {
+            for (User user : role.getUsers()) {
+                user.getRoles().remove(role);
+            }
+            role.setUsers(new ArrayList<>());
+            save(role);
+        }
+        if (!role.getAuthorities().isEmpty()) {
+            role.setAuthorities(new ArrayList<>());
+            save(role);
+        }
+        super.remove(role);
     }
 }

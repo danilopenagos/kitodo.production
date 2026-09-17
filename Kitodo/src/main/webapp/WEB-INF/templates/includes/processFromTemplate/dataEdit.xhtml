@@ -60,12 +60,12 @@
     <p:panelGrid id="processData"
                  layout="grid"
                  columns="2">
-        <p:row>
+        <p:panel styleClass="column-wrapper">
             <div class="import-table-section-title">
                 <h:outputText value="#{msgs.basicData}"/>
             </div>
             <p:panelGrid id="processDataEditGrid" layout="grid" columns="1">
-                <p:row>
+                <p:panel styleClass="column-wrapper">
                     <div>
                         <!-- process title -->
                         <p:outputLabel for="processTitle"
@@ -90,7 +90,7 @@
                         <p:selectOneMenu id="docType" value="#{CreateProcessForm.processDataTab.docType}">
                             <f:selectItems value="#{CreateProcessForm.processDataTab.allDoctypes}"
                                            var="step"
-                                           itemLabel="#{step.localizedLabel}"
+                                           itemLabel="#{step.label}"
                                            itemValue="#{step.title}"/>
                             <p:ajax event="valueChange"
                                     oncomplete="updateProcessMetadata();"
@@ -148,11 +148,10 @@
                             <p:ajax event="change"/>
                         </p:inputText>
                     </div>
-                </p:row>
-
+                </p:panel>
             </p:panelGrid>
-        </p:row>
-        <p:row>
+        </p:panel>
+        <p:panel styleClass="column-wrapper">
             <div class="import-table-section-title">
                 <h:outputText value="#{msgs.metadata}"/>
                 <h:panelGroup id="addMetadataButtonWrapper"
@@ -160,23 +159,25 @@
                     <p:commandButton id="addMetadataButton"
                                      value="#{msgs['dataEditor.addMetadata.newMetadata']}"
                                      icon="fa fa-plus"
+                                     iconPos="right"
                                      styleClass="secondary"
                                      update="addMetadataDialog"
-                                     disabled="#{not CreateProcessForm.addMetadataDialog.metadataAddableToStructureElement()}"
+                                     disabled="#{not CreateProcessForm.addMetadataDialog.metadataAddableToStructureElement() or not empty CreateProcessForm.rulesetValidationError}"
                                      action="#{CreateProcessForm.addMetadataDialog.prepareAddableMetadataForStructure()}"
                                      oncomplete="PF('addMetadataDialog').show();metadataTable.focusMetadataRow.remember(this.source);">
                     </p:commandButton>
                 </h:panelGroup>
             </div>
 
-            <h:panelGroup layout="block" styleClass="metadata-tree-wrapper">
+            <h:panelGroup layout="block" styleClass="metadata-tree-wrapper"
+                          rendered="#{empty CreateProcessForm.rulesetValidationError}">
                 <ui:include src="/WEB-INF/templates/includes/metadataTreeTable.xhtml">
                     <ui:param name="root" value="#{CreateProcessForm.processMetadata.logicalMetadataTree}"/>
                     <ui:param name="readOnly" value="#{false}"/>
                     <ui:param name="Form" value="#{CreateProcessForm}"/>
                 </ui:include>
             </h:panelGroup>
-        </p:row>
+        </p:panel>
     </p:panelGrid>
 
     <p:remoteCommand name="preserveMetadata"

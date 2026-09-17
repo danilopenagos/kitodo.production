@@ -22,20 +22,20 @@ public class RulesetEditPage extends EditPage<RulesetEditPage> {
 
     private static final String RULESET_TAB_VIEW = EDIT_FORM + ":rulesetTabView";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = RULESET_TAB_VIEW + ":title")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(className = "ui-selectonemenu-trigger")
     private WebElement selectTrigger;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(className = "ui-messages-error-summary")
     private WebElement errorMessage;
 
     public RulesetEditPage() {
-        super("pages/rulesetEdit.jsf");
+        super("pages/rulesetEdit");
     }
 
     @Override
@@ -56,7 +56,7 @@ public class RulesetEditPage extends EditPage<RulesetEditPage> {
         return this;
     }
 
-    public ProjectsPage save() throws IllegalAccessException, InstantiationException {
+    public ProjectsPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getProjectsPage().getUrl());
         return Pages.getProjectsPage();
     }

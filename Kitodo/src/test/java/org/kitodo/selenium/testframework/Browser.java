@@ -15,10 +15,13 @@ import static org.awaitility.Awaitility.await;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
@@ -33,7 +36,6 @@ import org.openqa.selenium.NoAlertPresentException;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
-import org.openqa.selenium.chrome.ChromeDriverService;
 import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.firefox.FirefoxDriver;
 import org.openqa.selenium.firefox.FirefoxOptions;
@@ -68,55 +70,40 @@ public class Browser {
     /**
      * Provides the web driver, sets timeout and window size.
      */
-    public static void Initialize() throws IOException {
+    public static void Initialize() throws IOException, URISyntaxException {
         if (BROWSER_TYPE.equals(BrowserType.CHROME)) {
-            provideChromeDriver();
-        }
-        if (BROWSER_TYPE.equals(BrowserType.FIREFOX)) {
-            provideGeckoDriver();
+            ChromeOptions options = getChromeOptions();
+
+            // Required for CI (GitHub Actions)
+            if (Objects.nonNull(System.getenv("CI"))) {
+                options.addArguments("--headless=new");
+                options.addArguments("--no-sandbox");
+                options.addArguments("--disable-dev-shm-usage");
+            }
+
+            webDriver = new ChromeDriver(options);
         }
 
+        if (BROWSER_TYPE.equals(BrowserType.FIREFOX)) {
+            provideGeckoDriver(); // can remain for now
+        }
         actions = new Actions(webDriver);
-        webDriver.manage().timeouts().implicitlyWait(10, TimeUnit.SECONDS);
+        webDriver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
         goTo("");
         webDriver.manage().window().setSize(new Dimension(1280, 1024));
     }
 
-    private static void provideChromeDriver() throws IOException {
-        File driverFile = getDriverFile();
 
-        if (!driverFile.exists()) {
-            logger.debug("{} does not exist, providing chrome driver now", driverFile.getAbsolutePath());
-            WebDriverProvider.provideChromeDriver(DOWNLOAD_DIR, DRIVER_DIR);
-        }
-
-        ChromeDriverService service = new ChromeDriverService.Builder()
-                .usingDriverExecutable(driverFile)
-                .usingAnyFreePort()
-                .build();
-
+    private static ChromeOptions getChromeOptions() {
         Map<String, Object> chromePrefs = new HashMap<>();
         chromePrefs.put("download.default_directory", DOWNLOAD_DIR);
         chromePrefs.put("download.prompt_for_download", false);
         ChromeOptions options = new ChromeOptions();
         options.setExperimentalOption("prefs", chromePrefs);
-
-        webDriver = new ChromeDriver(service, options);
+        return options;
     }
 
-    private static File getDriverFile() {
-        String driver = WebDriverProvider.CHROME_DRIVER;
-        if (SystemUtils.IS_OS_WINDOWS) {
-            driver = WebDriverProvider.CHROME_DRIVER_WIN_SUBDIR + "/" + driver.concat(WebDriverProvider.EXE);
-        } else if (SystemUtils.IS_OS_MAC_OSX) {
-            driver = WebDriverProvider.CHROME_DRIVER_MAC_SUBDIR + "/" + driver;
-        } else {
-            driver = WebDriverProvider.CHROME_DRIVER_LINUX_SUBDIR + "/" + driver;
-        }
-        return new File(DRIVER_DIR + driver);
-    }
-
-    private static void provideGeckoDriver() throws IOException {
+    private static void provideGeckoDriver() throws IOException, URISyntaxException {
         String driverFileName = "geckodriver";
         if (SystemUtils.IS_OS_WINDOWS) {
             driverFileName = driverFileName.concat(".exe");
@@ -253,6 +240,15 @@ public class Browser {
             return "";
         }
         return cells.get(columnIndex).getText();
+    }
+
+    public static List<String> getGridData(WebElement grid) {
+        List<WebElement> items = grid.findElements(By.cssSelector(".ui-panelgrid-cell.value"));
+        List<String> data = new ArrayList<>();
+        for (WebElement item : items) {
+            data.add(item.getText());
+        }
+        return data;
     }
 
     public static void closeDialog(WebElement dialog) {

@@ -41,11 +41,12 @@
             </ui:fragment>
         </h:panelGroup>
 
-        <p:panelGrid>
+        <p:panelGrid columns="1">
             <h:form id="retryForm">
-                <p:panelGrid>
-                    <p:row>
-                        <p:button href="#{request.contextPath}/logout"
+                <p:panelGrid columns="1">
+                    <p:column>
+                        <p:button href="#"
+                                  onclick="$('#retryForm')[0].action='#{request.contextPath}/logout';$('#retryForm')[0].submit();"
                                   id="logoutButton"
                                   value="#{msgs.logout}"
                                   styleClass="primary right"
@@ -59,7 +60,7 @@
                                          action="#{LoginForm.performPostLoginChecks()}"
                                          update="messageWrapper"
                                          styleClass="secondary right"/>
-                    </p:row>
+                    </p:column>
                 </p:panelGrid>
             </h:form>
         </p:panelGrid>

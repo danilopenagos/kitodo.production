@@ -21,8 +21,10 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Field;
 import java.util.AbstractMap;
 import java.util.LinkedList;
+import java.util.Objects;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,6 +50,8 @@ public class MediaPartialFormTest {
     PhysicalDivision physicalDivision;
     PhysicalDivision physicalStructure;
 
+    private static MockedStatic<Ajax> ajaxMockedStatic;
+    private static MockedStatic<PrimeFaces> primefacesSingleton;
 
     /**
      * Initialize test class.
@@ -55,10 +59,23 @@ public class MediaPartialFormTest {
     @BeforeAll
     public static void initTestClass() {
         // mock frontend update calls
-        Mockito.mockStatic(Ajax.class);
+        ajaxMockedStatic = Mockito.mockStatic(Ajax.class);
         PrimeFaces primeFaces = mock(PrimeFaces.class);
-        MockedStatic<PrimeFaces> primefacesSingleton = Mockito.mockStatic(PrimeFaces.class);
+        primefacesSingleton = Mockito.mockStatic(PrimeFaces.class);
         primefacesSingleton.when(PrimeFaces::current).thenReturn(primeFaces);
+    }
+
+    /**
+     * Clean up static mocks.
+     */
+    @AfterAll
+    public static void cleanupTestClass() {
+        if (Objects.nonNull(ajaxMockedStatic)) {
+            ajaxMockedStatic.close();
+        }
+        if (Objects.nonNull(primefacesSingleton)) {
+            primefacesSingleton.close();
+        }
     }
 
     /**
@@ -120,7 +137,7 @@ public class MediaPartialFormTest {
         assertEquals(2, logicalDivision.getChildren().size());
         assertEquals("Lorem", logicalDivision.getChildren().get(1).getLabel());
         LogicalDivision mediaPartialLogicalDivision = logicalDivision.getChildren().get(1);
-        MediaPartial mediaPartial = mediaPartialLogicalDivision.getViews().get(0).getPhysicalDivision()
+        MediaPartial mediaPartial = mediaPartialLogicalDivision.getViews().getFirst().getPhysicalDivision()
                 .getMediaPartial();
         assertEquals("00:00:45.000", mediaPartial.getBegin());
         assertEquals("00:00:15.000", mediaPartial.getExtent());
@@ -135,9 +152,9 @@ public class MediaPartialFormTest {
 
         assertEquals(2, logicalDivision.getChildren().size());
         // 'media partial' is now designated as the first child in the sorting order.
-        assertEquals("Lorem ipsum", logicalDivision.getChildren().get(0).getLabel());
-        mediaPartialLogicalDivision = logicalDivision.getChildren().get(0);
-        mediaPartial = mediaPartialLogicalDivision.getViews().get(0).getPhysicalDivision()
+        assertEquals("Lorem ipsum", logicalDivision.getChildren().getFirst().getLabel());
+        mediaPartialLogicalDivision = logicalDivision.getChildren().getFirst();
+        mediaPartial = mediaPartialLogicalDivision.getViews().getFirst().getPhysicalDivision()
                 .getMediaPartial();
         assertEquals("00:00:10.000", mediaPartial.getBegin());
         assertEquals("00:00:20.000",

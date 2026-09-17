@@ -18,17 +18,17 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Convert;
-import javax.persistence.Entity;
-import javax.persistence.ForeignKey;
-import javax.persistence.JoinColumn;
-import javax.persistence.JoinTable;
-import javax.persistence.ManyToMany;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
-import javax.persistence.Transient;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.ForeignKey;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 
 import org.kitodo.data.database.converter.TaskEditTypeConverter;
 import org.kitodo.data.database.converter.TaskStatusConverter;
@@ -934,8 +934,8 @@ public class Task extends BaseBean {
             return CorrectionComments.NO_CORRECTION_COMMENTS.getValue();
         }
         List<Comment> correctionComments = process.getComments()
-                .stream().filter(c -> CommentType.ERROR.equals(c.getType())).collect(Collectors.toList());
-        if (correctionComments.size() < 1) {
+                .stream().filter(c -> CommentType.ERROR.equals(c.getType())).toList();
+        if (correctionComments.isEmpty()) {
             return CorrectionComments.NO_CORRECTION_COMMENTS.getValue();
         } else if (correctionComments.stream().anyMatch(c -> !c.isCorrected())) {
             return CorrectionComments.OPEN_CORRECTION_COMMENTS.getValue();

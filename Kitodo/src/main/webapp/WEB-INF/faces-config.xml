@@ -14,8 +14,8 @@
 <faces-config
     xmlns="http://xmlns.jcp.org/xml/ns/javaee"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-facesconfig_2_2.xsd"
-    version="2.2">
+    xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-facesconfig_4_0.xsd"
+    version="4.0">
     <application>
         <locale-config>
             <default-locale>de</default-locale>
@@ -41,9 +41,9 @@
     </factory>
     <render-kit>
         <renderer>
-            <component-family>org.primefaces.component</component-family>
-            <renderer-type>org.primefaces.component.MediaRenderer</renderer-type>
-            <renderer-class>org.kitodo.production.renderer.KitodoMediaRenderer</renderer-class>
+            <component-family>jakarta.faces.Form</component-family>
+            <renderer-type>jakarta.faces.Form</renderer-type>
+            <renderer-class>org.kitodo.production.security.CsrfFormRenderer</renderer-class>
         </renderer>
     </render-kit>
 </faces-config>

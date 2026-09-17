@@ -25,8 +25,9 @@
               dynamic="true"
               modal="true">
         <h:form id="addMetadataForm">
-            <p:panelGrid columns="1" layout="grid">
-                <p:row>
+            <p:panelGrid id="addMetadataGrid"
+                         columns="1"
+                         layout="grid">
                     <h3>#{msgs['dataEditor.addMetadata.newMetadata']}</h3>
                     <h:panelGroup layout="block"
                                   styleClass="dialogFieldWrapper">
@@ -38,6 +39,7 @@
                             <p:selectOneMenu id="metadataType"
                                              converter="#{processDetailConverter}"
                                              value="#{MassImportForm.addMetadataDialog.metadataDetail}"
+                                             autoWidth="false"
                                              title="#{msgs.type}">
                                 <f:selectItems value="#{MassImportForm.addMetadataDialog.allMetadataTypes}"
                                                var="metadataType"
@@ -103,9 +105,7 @@
                             <p:selectOneRadio id="selectOneRadio"
                                               styleClass="input"
                                               value="#{MassImportForm.addMetadataDialog.metadataDetail.selectedItem}"
-                                              rendered="#{MassImportForm.addMetadataDialog.metadataDetail.input eq 'oneRadio'}"
-                                              layout="grid"
-                                              columns="1">
+                                              rendered="#{MassImportForm.addMetadataDialog.metadataDetail.input eq 'oneRadio'}">
                                 <f:selectItems value="#{MassImportForm.addMetadataDialog.metadataDetail.items}"/>
                                 <p:ajax/>
                             </p:selectOneRadio>
@@ -123,7 +123,7 @@
                                   styleClass="dialogButtonWrapper">
                         <p:commandButton id="apply"
                                          action="#{MassImportForm.addMetadataDialog.addMetadata()}"
-                                         update="editForm:recordsTableWrapper"
+                                         update="recordsForm:recordsTableWrapper"
                                          oncomplete="PF('addMetadataDialog').hide();"
                                          value="#{msgs.apply}"
                                          styleClass="primary right"/>
@@ -135,7 +135,6 @@
                                          iconPos="right"
                                          styleClass="secondary right"/>
                     </h:panelGroup>
-                </p:row>
             </p:panelGrid>
         </h:form>
     </p:dialog>

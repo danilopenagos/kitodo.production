@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.apache.commons.lang3.StringUtils;
 import org.kitodo.config.enums.KitodoConfigFile;
 import org.kitodo.data.database.beans.Client;
 import org.kitodo.data.database.beans.Folder;
@@ -36,16 +37,6 @@ import org.kitodo.production.services.ServiceManager;
 import org.primefaces.model.SortOrder;
 
 public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
-
-    private static final Map<String, String> SORT_FIELD_MAPPING;
-
-    static {
-        SORT_FIELD_MAPPING = new HashMap<>();
-        SORT_FIELD_MAPPING.put("title", "title");
-        SORT_FIELD_MAPPING.put("title.keyword", "title");
-        SORT_FIELD_MAPPING.put("metsRightsOwner.keyword", "metsRightsOwner");
-        SORT_FIELD_MAPPING.put("active", "active");
-    }
 
     private static volatile ProjectService instance = null;
 
@@ -108,9 +99,45 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
     public List<Project> loadData(int first, int pageSize, String sortField, SortOrder sortOrder, Map<?, String> filters)
             throws DAOException {
 
-        BeanQuery query = getProjectsQuery();
-        query.defineSorting(SORT_FIELD_MAPPING.get(sortField), sortOrder);
+        BeanQuery query = getSortedProjectsQuery(sortField, sortOrder);
         return getByQuery(query.formQueryForAll(), query.getQueryParameters(), first, pageSize);
+    }
+
+    /**
+     * Loads active projects in the requested range and sort order.
+     *
+     * <p>This is used for views such as the desktop project widget where deactivated
+     * projects must not be offered for process creation.</p>
+     *
+     * @param first
+     *            index of the first result to load
+     * @param pageSize
+     *            maximum number of projects to load
+     * @param sortField
+     *            project field to sort by; defaults to title if blank
+     * @param sortOrder
+     *            sort order; defaults to ascending if null
+     * @return list of active projects
+     */
+    public List<Project> loadActiveProjects(int first, int pageSize, String sortField, SortOrder sortOrder)
+            throws DAOException {
+
+        BeanQuery query = getSortedProjectsQuery(sortField, sortOrder);
+        query.addBooleanRestriction("active", true);
+
+        return getByQuery(query.formQueryForAll(), query.getQueryParameters(), first, pageSize);
+    }
+
+    private BeanQuery getSortedProjectsQuery(String sortField, SortOrder sortOrder) {
+        if (StringUtils.isBlank(sortField)) {
+            sortField = "title";
+        }
+        if (Objects.isNull(sortOrder)) {
+            sortOrder = SortOrder.ASCENDING;
+        }
+        BeanQuery query = getProjectsQuery();
+        query.defineSorting(sortField, sortOrder);
+        return query;
     }
 
     private static BeanQuery getProjectsQuery() {
@@ -155,12 +182,14 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
         Map<String, Object> parameters = new HashMap<>(7);
         parameters.put("sessionClientId", ServiceManager.getUserService().getSessionClientId());
         if (user.getProjects().isEmpty()) {
-            return getByQuery("FROM Project WHERE client_id = :sessionClientId", parameters);
+            return getByQuery("FROM Project WHERE client.id = :sessionClientId", parameters);
         } else {
-            String assignedProjects = user.getProjects().stream().map(Project::getId).map(Objects::toString)
-                    .collect(Collectors.joining(COMMA_DELIMITER, "(", ")"));
-            parameters.put("assignedProjects", assignedProjects);
-            return getByQuery("FROM Project WHERE client_id = :sessionClientId AND id NOT IN :assignedProjects",
+            List<Integer> assignedProjectIds = user.getProjects()
+                    .stream()
+                    .map(Project::getId)
+                    .collect(Collectors.toList());
+            parameters.put("assignedProjects", assignedProjectIds);
+            return getByQuery("FROM Project WHERE client.id = :sessionClientId AND id NOT IN :assignedProjects",
                 parameters);
         }
     }
@@ -190,12 +219,50 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
     public Project duplicateProject(Project baseProject) {
         Project duplicatedProject = new Project();
 
+        duplicateGeneralProjectSettings(baseProject, duplicatedProject);
+
+        duplicateFolderSettings(baseProject, duplicatedProject);
+
+        duplicateImportConfiguration(baseProject, duplicatedProject);
+
+        return duplicatedProject;
+    }
+
+    private void duplicateImportConfiguration(Project baseProject, Project duplicatedProject) {
+        duplicatedProject.setDefaultImportConfiguration(baseProject.getDefaultImportConfiguration());
+        duplicatedProject.setDefaultChildProcessImportConfiguration(baseProject.getDefaultChildProcessImportConfiguration());
+    }
+
+    private void duplicateFolderSettings(Project baseProject, Project duplicatedProject) {
+        FolderService folderService = ServiceManager.getFolderService();
+        List<Folder> duplicatedFolders = new ArrayList<>();
+
+        for (Folder folder : baseProject.getFolders()) {
+            Folder duplicatedFolder = folderService.cloneFolder(folder);
+            duplicatedFolder.setProject(duplicatedProject);
+            duplicatedFolders.add(duplicatedFolder);
+        }
+
+        duplicatedProject.setFolders(duplicatedFolders);
+        duplicatedProject.setGeneratorSource(baseProject.getGeneratorSource());
+        duplicatedProject.setMediaView(baseProject.getMediaView());
+        duplicatedProject.setPreview(baseProject.getPreview());
+        duplicatedProject.setAudioMediaView(baseProject.getAudioMediaView());
+        duplicatedProject.setAudioPreview(baseProject.getAudioPreview());
+        duplicatedProject.setAudioMediaViewWaveform(baseProject.isAudioMediaViewWaveform());
+        duplicatedProject.setVideoMediaView(baseProject.getVideoMediaView());
+        duplicatedProject.setVideoPreview(baseProject.getVideoPreview());
+        duplicatedProject.setPreviewHoverMode(baseProject.getPreviewHoverMode());
+    }
+
+    private void duplicateGeneralProjectSettings(Project baseProject, Project duplicatedProject) {
         duplicatedProject.setTitle(baseProject.getTitle() + "_" + Helper.generateRandomString(3));
         duplicatedProject.setClient(baseProject.getClient());
         duplicatedProject.setStartDate(baseProject.getStartDate());
         duplicatedProject.setEndDate(baseProject.getEndDate());
         duplicatedProject.setNumberOfPages(baseProject.getNumberOfPages());
         duplicatedProject.setNumberOfVolumes(baseProject.getNumberOfVolumes());
+        duplicatedProject.setActive(baseProject.isActive());
         duplicatedProject.setDmsImportRootPath(baseProject.getDmsImportRootPath());
         duplicatedProject.setMetsRightsOwner(baseProject.getMetsRightsOwner());
         duplicatedProject.setMetsRightsOwnerLogo(baseProject.getMetsRightsOwnerLogo());
@@ -206,34 +273,6 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
         duplicatedProject.setMetsPointerPath(baseProject.getMetsPointerPath());
         duplicatedProject.setMetsPurl(baseProject.getMetsPurl());
         duplicatedProject.setMetsContentIDs(baseProject.getMetsContentIDs());
-
-        FolderService folderService = ServiceManager.getFolderService();
-        List<Folder> duplicatedFolders = new ArrayList<>();
-        Folder generatorSource = null;
-        Folder mediaView = null;
-        Folder preview = null;
-
-        for (Folder folder : baseProject.getFolders()) {
-            Folder duplicatedFolder = folderService.cloneFolder(folder);
-            duplicatedFolder.setProject(duplicatedProject);
-            duplicatedFolders.add(duplicatedFolder);
-
-            if (folder.equals(baseProject.getGeneratorSource())) {
-                generatorSource = duplicatedFolder;
-            }
-            if (folder.equals(baseProject.getMediaView())) {
-                mediaView = duplicatedFolder;
-            }
-            if (folder.equals(baseProject.getPreview())) {
-                preview = duplicatedFolder;
-            }
-        }
-        duplicatedProject.setFolders(duplicatedFolders);
-        duplicatedProject.setGeneratorSource(generatorSource);
-        duplicatedProject.setMediaView(mediaView);
-        duplicatedProject.setPreview(preview);
-
-        return duplicatedProject;
     }
 
     /**
@@ -254,8 +293,34 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
         List<Project> allUsersProjects = userService.getCurrentUser().getProjects();
         Client sessionClient = ServiceManager.getUserService().getSessionClientOfAuthenticatedUser();
         List<Project> usersProjectsForSelectedClient = allUsersProjects.stream().filter(project -> Objects.equals(
-            project.getClient(), sessionClient)).collect(Collectors.toList());
+                project.getClient(), sessionClient)).collect(Collectors.toList());
         return usersProjectsForSelectedClient;
+    }
+
+    /**
+     * Checks whether the current user is assigned to the specified project in the
+     * currently selected client.
+     * @param projectId
+     *            ID of the project to check
+     * @return  true if the current user is assigned to the project in the current client, otherwise false
+     */
+    public boolean isProjectAssignedToCurrentUser(Integer projectId) throws DAOException {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("projectId", projectId);
+        parameters.put("userId", userService.getCurrentUser().getId());
+        parameters.put("clientId", userService.getSessionClientId());
+
+        return !getByQuery(
+            "SELECT project "
+                + "FROM Project project "
+                + "JOIN project.users user "
+                + "WHERE project.id = :projectId "
+                + "AND user.id = :userId "
+                + "AND project.client.id = :clientId",
+            parameters,
+            0,
+            1
+        ).isEmpty();
     }
 
     /**
@@ -293,10 +358,24 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
             return projects.stream().map(Project::getTitle).collect(Collectors.joining(COMMA_DELIMITER));
         } else {
             List<Integer> userProjectIds = findAllProjectsForCurrentUser().stream().map(Project::getId)
-                    .collect(Collectors.toList());
+                    .toList();
             return projects.stream().filter(project -> userProjectIds.contains(project.getId())).map(Project::getTitle)
                     .collect(Collectors.joining(COMMA_DELIMITER));
         }
+    }
+
+    /**
+     * Checks whether the given project has any processes assigned to it.
+     *
+     * @param projectId
+     *            the ID of the project to check
+     * @return return true if at least one process belongs to the project,
+     *            false otherwise
+     */
+    public boolean hasProcesses(int projectId) throws DAOException {
+        return dao.has("FROM Process AS process WHERE process.project.id = :project_id",
+                Collections.singletonMap("project_id", projectId)
+        );
     }
 
     /**
@@ -317,6 +396,6 @@ public class ProjectService extends BaseBeanService<Project, ProjectDAO> {
             template.getProjects().remove(project);
             ServiceManager.getTemplateService().save(template);
         }
-        ServiceManager.getProjectService().remove(project);
+        ServiceManager.getProjectService().remove(projectID);
     }
 }

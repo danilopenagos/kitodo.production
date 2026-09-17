@@ -29,7 +29,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.kitodo.MockDatabase;
-import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.selenium.testframework.BaseTestSelenium;
 import org.kitodo.selenium.testframework.Browser;
@@ -42,7 +41,6 @@ import org.kitodo.test.utils.TestConstants;
 import org.openqa.selenium.By;
 import org.openqa.selenium.support.ui.Select;
 
-@Disabled("Breaks ListingSessionClientST due to incomplete clean-up")
 public class ImportingST extends BaseTestSelenium {
 
     private static StubServer server;
@@ -82,7 +80,7 @@ public class ImportingST extends BaseTestSelenium {
     }
 
     @AfterAll
-    public static void cleanup() throws DAOException, IOException {
+    public static void cleanup() throws Exception {
         ProcessService.deleteProcess(multiVolumeWorkId);
         server.stop();
     }
@@ -171,12 +169,13 @@ public class ImportingST extends BaseTestSelenium {
      *
      * @throws Exception when opening the "create new process" form fails
      */
+    @Disabled("Error: element not interactable")
     @Test
     public void checkCollapsedCheckboxMetadataIsPreserved() throws Exception {
         projectsPage.createNewProcess("Book template");
         importPage.cancelCatalogSearch();
         importPage.insertTestTitle("Testvorgang");
-        importPage.selectCheckBox(0);
+        importPage.selectCheckBox(0); // <-- PROBLEM HERE
         importPage.toggleTreeTable();
         importPage.clickSaveButton();
         await("Waiting to be redirected to processes page after saving process with selected mandatory checkbox "
@@ -239,7 +238,7 @@ public class ImportingST extends BaseTestSelenium {
         assertEquals(1, processesPage.countListedProcesses(), "Exactly one imported parent process should be displayed");
         List<String> processIds = processesPage.getProcessIds();
         assertEquals(1, processIds.size(), "Exactly one process ID should be visible");
-        int processId = Integer.parseInt(processIds.get(0));
+        int processId = Integer.parseInt(processIds.getFirst());
         processesPage.filterByChildren();
         List<String> childProcessIds = processesPage.getProcessIds();
         assertEquals(3, childProcessIds.size(), "Wrong number of child processes");

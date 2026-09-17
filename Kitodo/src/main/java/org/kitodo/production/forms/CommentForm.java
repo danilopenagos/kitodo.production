@@ -18,8 +18,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 
-import javax.enterprise.context.SessionScoped;
-import javax.inject.Named;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -29,6 +29,7 @@ import org.kitodo.data.database.beans.Task;
 import org.kitodo.data.database.enums.CommentType;
 import org.kitodo.data.database.enums.TaskEditType;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.production.enums.ObjectType;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.helper.batch.BatchTaskHelper;
@@ -36,9 +37,10 @@ import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.production.services.data.TaskService;
 import org.kitodo.production.services.workflow.WorkflowControllerService;
+import org.xml.sax.SAXException;
 
 @Named("CommentForm")
-@SessionScoped
+@ViewScoped
 public class CommentForm extends BaseForm {
     private static final Logger logger = LogManager.getLogger(CommentForm.class);
     private boolean correctionComment = false;
@@ -204,7 +206,6 @@ public class CommentForm extends BaseForm {
         } catch (DAOException e) {
             Helper.setErrorMessage("reportingProblem", logger, e);
         }
-        refreshProcess(this.currentTask.getProcess());
     }
 
     /**
@@ -252,7 +253,7 @@ public class CommentForm extends BaseForm {
             return Collections.emptyList();
         } else {
             return ServiceManager.getTaskService().getPreviousTasksForProblemReporting(
-                    currentTaskOptions.get(0).getOrdering(),
+                    currentTaskOptions.getFirst().getOrdering(),
                     this.process.getId());
         }
     }
@@ -267,10 +268,9 @@ public class CommentForm extends BaseForm {
     public String solveProblem(Comment comment) {
         try {
             this.workflowControllerService.solveProblem(comment, TaskEditType.MANUAL_SINGLE);
-        } catch (DAOException | IOException e) {
+        } catch (DAOException | IOException | SAXException | FileStructureValidationException e) {
             Helper.setErrorMessage("SolveProblem", logger, e);
         }
-        refreshProcess(comment.getCurrentTask().getProcess());
         return MessageFormat.format(REDIRECT_PATH, "tasks");
     }
 
@@ -310,18 +310,6 @@ public class CommentForm extends BaseForm {
     }
 
     /**
-     * refresh the process in the session.
-     *
-     * @param process Object process to refresh
-     */
-    private void refreshProcess(Process process) {
-        if (!Objects.equals(process.getId(), 0) && Objects.nonNull(this.currentTask)) {
-            ServiceManager.getProcessService().refresh(process);
-            this.currentTask.setProcess(process);
-        }
-    }
-
-    /**
      * Set current task by ID.
      *
      * @param taskId
@@ -352,7 +340,7 @@ public class CommentForm extends BaseForm {
      */
     public void newComment(Boolean isCorrectionComment) {
         if (getSizeOfPreviousStepsForProblemReporting() > 0) {
-            setCorrectionTaskId(getPreviousStepsForProblemReporting().get(0).getId().toString());
+            setCorrectionTaskId(getPreviousStepsForProblemReporting().getFirst().getId().toString());
         } else {
             setCorrectionTaskId("");
         }

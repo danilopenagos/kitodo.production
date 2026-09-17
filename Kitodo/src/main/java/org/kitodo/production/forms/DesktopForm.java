@@ -13,27 +13,38 @@ package org.kitodo.production.forms;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
 import javax.json.JsonException;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.beans.Project;
 import org.kitodo.data.database.beans.Task;
+import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.data.database.persistence.TaskDAO;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.ProjectDeletionException;
 import org.kitodo.production.enums.ObjectType;
 import org.kitodo.production.helper.Helper;
+import org.kitodo.production.helper.ProcessProgressHelper;
 import org.kitodo.production.helper.WebDav;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.production.services.data.ProjectService;
 import org.primefaces.model.SortOrder;
+import org.xml.sax.SAXException;
 
 @Named("DesktopForm")
 @ViewScoped
@@ -44,6 +55,10 @@ public class DesktopForm extends BaseForm {
     private List<Task> taskList = new ArrayList<>();
     private List<Process> processList = new ArrayList<>();
     private List<Project> projectList = new ArrayList<>();
+    private Map<Integer, EnumMap<TaskStatus, Integer>> taskStatusCache = new HashMap<>();
+    private Map<Integer, Map<TaskStatus, List<String>>> taskTitleCache = new HashMap<>();
+    private Set<Integer> processesWithChildren = new HashSet<>();
+    private final ProcessProgressHelper progressHelper = new ProcessProgressHelper();
 
     /**
      * Default constructor.
@@ -52,10 +67,30 @@ public class DesktopForm extends BaseForm {
         super();
     }
 
+    @PostConstruct
+    public void init() {
+        loadProcesses();
+    }
+
+    /**
+     * Loads processes and initializes related caches.
+     */
+    private void loadProcesses() {
+        try {
+            if (ServiceManager.getSecurityAccessService().hasAuthorityToViewProcessList()) {
+                processList = ServiceManager.getProcessService().loadData(0, 10, SORT_ID, SortOrder.DESCENDING, null);
+                preloadProcessCaches();
+            }
+        } catch (DAOException | JsonException e) {
+            Helper.setErrorMessage(ERROR_LOADING_MANY,
+                    new Object[]{ObjectType.PROCESS.getTranslationPlural()}, logger, e);
+        }
+    }
+
     /**
      * Get values of ObjectType enum.
      *
-     * @return array containing values of ObjectType enum
+     * @return List containing values of ObjectType enum
      */
     public List<ObjectType> getObjectTypes() {
         ArrayList<ObjectType> objectTypes = new ArrayList<>();
@@ -94,15 +129,28 @@ public class DesktopForm extends BaseForm {
      * @return process list
      */
     public List<Process> getProcesses() {
-        try {
-            if (ServiceManager.getSecurityAccessService().hasAuthorityToViewProcessList() && processList.isEmpty()) {
-                processList = ServiceManager.getProcessService().loadData(0, 10, SORT_ID, SortOrder.DESCENDING, null);
-            }
-        } catch (DAOException | JsonException e) {
-            Helper.setErrorMessage(ERROR_LOADING_MANY, new Object[] {ObjectType.PROCESS.getTranslationPlural() },
-                logger, e);
-        }
         return processList;
+    }
+
+    /**
+     * Preloads task-related caches for the processes in the processlist
+     * (status counts, task titles, and child-process information).
+     */
+    private void preloadProcessCaches() throws DAOException {
+        if (processList.isEmpty()) {
+            return;
+        }
+        List<Integer> ids = processList.stream()
+                .map(Process::getId)
+                .toList();
+        taskStatusCache =
+                new TaskDAO().loadTaskStatusCountsForProcesses(ids);
+        taskTitleCache =
+                ServiceManager.getTaskService()
+                        .loadTaskTitlesForProcesses(ids);
+        processesWithChildren =
+                ServiceManager.getProcessService()
+                        .findProcessIdsWithChildren(ids);
     }
 
     /**
@@ -113,7 +161,7 @@ public class DesktopForm extends BaseForm {
     public List<Project> getProjects() {
         try {
             if (ServiceManager.getSecurityAccessService().hasAuthorityToViewProjectList() && projectList.isEmpty()) {
-                projectList = ServiceManager.getProjectService().loadData(0, 10, SORT_TITLE, SortOrder.ASCENDING, null);
+                projectList = ServiceManager.getProjectService().loadActiveProjects(0, 10, "title", SortOrder.ASCENDING);
             }
         } catch (DAOException | JsonException e) {
             Helper.setErrorMessage(ERROR_LOADING_MANY, new Object[] {ObjectType.PROJECT.getTranslationPlural() },
@@ -131,7 +179,7 @@ public class DesktopForm extends BaseForm {
         try {
             ProcessService.deleteProcess(processID);
             emptyCache();
-        } catch (DAOException | IOException e) {
+        } catch (DAOException | IOException | SAXException | FileStructureValidationException e) {
             Helper.setErrorMessage(ERROR_DELETING, new Object[] {ObjectType.PROCESS.getTranslationSingular() },
                     logger, e);
         }
@@ -160,7 +208,7 @@ public class DesktopForm extends BaseForm {
     public void exportMets(int processId) {
         try {
             ProcessService.exportMets(processId);
-        } catch (DAOException | IOException e) {
+        } catch (DAOException | IOException | SAXException | FileStructureValidationException e) {
             Helper.setErrorMessage("An error occurred while trying to export METS file for process "
                     + processId, logger, e);
         }
@@ -171,7 +219,7 @@ public class DesktopForm extends BaseForm {
      * being edited by another user and placed in his home directory, otherwise
      * download.
      */
-    public void downloadToHome(int processId) {
+    public static void downloadToHome(int processId) {
         try {
             ProcessService.downloadToHome(new WebDav(), processId);
         } catch (DAOException e) {
@@ -216,6 +264,103 @@ public class DesktopForm extends BaseForm {
         }
         return 0L;
     }
+
+    /**
+     * Returns whether the given process has child processes based on the preloaded desktop cache.
+     * @param process the process to check
+     * @return true if the process has children, otherwise false
+     */
+    public boolean hasChildren(Process process) {
+        return processesWithChildren.contains(process.getId());
+    }
+
+    /**
+     * Returns whether the given process has any tasks based on the preloaded desktop cache.
+     *
+     * @param process the process to check
+     * @return true if the process has tasks, otherwise false
+     */
+    public boolean hasAnyTasks(Process process) {
+        EnumMap<TaskStatus, Integer> counts =
+                taskStatusCache.get(process.getId());
+        if (counts == null) {
+            return false;
+        }
+        return counts.values().stream().mapToInt(Integer::intValue).sum() > 0;
+    }
+
+    /**
+     * Returns cached task status counts for the given process.
+     */
+    private Map<TaskStatus, Integer> getCachedTaskStatusCounts(Process process) {
+        return taskStatusCache.getOrDefault(
+                process.getId(),
+                new EnumMap<>(TaskStatus.class)
+        );
+    }
+
+    /**
+     * Returns formatted titles of open and in-work tasks based on the preloaded desktop cache.
+     *
+     * @param process the process
+     * @return formatted task titles or empty string if none exist
+     */
+    public String getCurrentTaskTitles(Process process) {
+        return progressHelper.buildTaskTitleTooltip(
+                taskTitleCache.get(process.getId())
+        );
+    }
+
+    /**
+     * Calculates the percentage of tasks with the given status based on the preloaded desktop cache.
+     *
+     * @param process the process
+     * @param status the task status
+     * @return progress percentage for the given status
+     */
+    public double progress(Process process, TaskStatus status) {
+        return progressHelper.progress(
+                getCachedTaskStatusCounts(process),
+                status
+        );
+    }
+
+    /**
+     * Returns the percentage of completed tasks of the given process.
+     *
+     * @param process the process
+     * @return percentage of completed tasks
+     */
+    public double progressClosed(Process process) {
+        return progressHelper.progressClosed(
+                getCachedTaskStatusCounts(process)
+        );
+    }
+
+    /**
+     * Returns the percentage of tasks currently in processing of the given process.
+     *
+     * @param process the process
+     * @return percentage of tasks in processing
+     */
+    public double progressInProcessing(Process process) {
+        return progressHelper.progressInProcessing(
+                getCachedTaskStatusCounts(process)
+        );
+    }
+
+    /**
+     * Returns the percentage of startable tasks of the given process.
+     *
+     * @param process the process
+     * @return percentage of startable tasks
+     */
+    public double progressOpen(Process process) {
+        return progressHelper.progressOpen(
+                getCachedTaskStatusCounts(process)
+        );
+    }
+
 
     /**
      * Empties the lists for caching.

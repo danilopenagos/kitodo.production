@@ -93,6 +93,24 @@ public class BeanQueryTest {
     }
 
     @Test
+    public void shouldUseUniqueParameterNamesForCollectionRestrictions() {
+        Collection<Integer> selectedIds = Arrays.asList(2, 3, 5);
+        Collection<Integer> excludedIds = Arrays.asList(3);
+
+        BeanQuery beanQuery = new BeanQuery(Process.class);
+        beanQuery.addInCollectionRestriction("id", selectedIds);
+        beanQuery.addNotInCollectionRestriction("id", excludedIds);
+
+        assertThat(beanQuery.formQueryForAll(),
+            containsString("process.id IN (:id)"));
+        assertThat(beanQuery.formQueryForAll(),
+            containsString("process.id NOT IN (:id2)"));
+
+        assertThat(beanQuery.getQueryParameters().get("id"), is(equalTo(selectedIds)));
+        assertThat(beanQuery.getQueryParameters().get("id2"), is(equalTo(excludedIds)));
+    }
+
+    @Test
     public void shouldAddNullRestriction() {
         BeanQuery beanQuery = new BeanQuery(Process.class);
         beanQuery.addNullRestriction("parent.id");
@@ -187,7 +205,7 @@ public class BeanQueryTest {
         BeanQuery beanQuery = new BeanQuery(Task.class);
         beanQuery.restrictToRoles(roles);
         assertThat("should construct HQL query for roles", beanQuery.formQueryForAll(), startsWith(
-            "FROM Task AS task LEFT JOIN task.roles AS taskRoles WHERE taskRoles IN (:userRoles)"));
+            "FROM Task AS task WHERE EXISTS (SELECT 1 FROM task.roles r WHERE r IN (:userRoles))"));
         assertThat("should define userRoles as Collection<Role>", beanQuery.getQueryParameters().get("userRoles"),
             is(equalTo(roles)));
     }
@@ -196,7 +214,7 @@ public class BeanQueryTest {
     public void shouldDefineSorting() {
         BeanQuery beanQuery = new BeanQuery(Process.class);
         assertThat("should construct HQL query sorting by ID", beanQuery.formQueryForAll(), containsString(
-            "ORDER BY id ASC"));
+            "ORDER BY process.id ASC"));
         beanQuery.defineSorting("title", SortOrder.DESCENDING);
         assertThat("should construct HQL query sorting by title descending", beanQuery.formQueryForAll(),
             containsString("ORDER BY process.title DESC"));
@@ -206,7 +224,7 @@ public class BeanQueryTest {
     public void shouldSetUnordered() {
         BeanQuery beanQuery = new BeanQuery(Process.class);
         assertThat("should construct HQL query sorting by ID", beanQuery.formQueryForAll(), containsString(
-            "ORDER BY id ASC"));
+            "ORDER BY process.id ASC"));
         beanQuery.setUnordered();
         assertThat("should construct HQL query without sorting", beanQuery.formQueryForAll(), not(containsString(
             "ORDER BY")));

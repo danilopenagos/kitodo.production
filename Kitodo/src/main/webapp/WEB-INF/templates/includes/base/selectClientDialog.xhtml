@@ -43,7 +43,7 @@
                     </p:selectOneMenu>
                 </p>
                 <p:panelGrid>
-                    <p:row>
+                    <p:column styleClass="ui-md-12">
                         <p:commandButton id="setSessionClientButton"
                                          actionListener="#{SessionClientController.setSelectedClientAsSessionClient}"
                                          action="#{LoginForm.performPostLoginChecks()}"
@@ -55,14 +55,15 @@
                                          value="#{msgs.select}"
                                          icon="fa fa-check"
                                          iconPos="right"/>
-                        <p:button href="${request.contextPath}/logout"
+                        <p:button href="#"
+                                  onclick="$('#select-session-client-form')[0].action='#{request.contextPath}/logout';$('#select-session-client-form')[0].submit();"
                                   id="cancelSessionClientSelectionButton"
                                   type="button"
                                   value="#{msgs.cancel}"
                                   styleClass="secondary right"
                                   icon="fa fa-close"
                                   iconPos="right"/>
-                    </p:row>
+                    </p:column>
                 </p:panelGrid>
             </div>
         </h:form>

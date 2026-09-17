@@ -14,6 +14,7 @@ package org.kitodo.selenium.testframework.pages;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.kitodo.selenium.testframework.Browser.getCellsOfRow;
+import static org.kitodo.selenium.testframework.Browser.getGridData;
 import static org.kitodo.selenium.testframework.Browser.getRowsOfTable;
 import static org.kitodo.selenium.testframework.Browser.getTableDataByColumn;
 
@@ -46,138 +47,138 @@ public class ProjectsPage extends Page<ProjectsPage> {
     private static final String FIRST_TEMPLATE = "First template";
     private static final String MASS_IMPORT_LINK = "a.ui-commandlink:has(i.fa-stack-overflow)";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROJECTS_TAB_VIEW)
     private WebElement projectsTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROJECTS_TABLE + DATA)
     private WebElement projectsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TABLE + DATA)
     private WebElement templatesTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = WORKFLOW_TABLE + DATA)
     private WebElement workflowsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = DOCKET_TABLE + DATA)
     private WebElement docketsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = RULESET_TABLE + DATA)
     private WebElement rulesetsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = IMPORT_CONFIGURATIONS_TABLE + DATA)
     private WebElement importConfigurationsTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = MAPPING_FILE_TABLE + DATA)
     private WebElement mappingFilesTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = MAPPING_FILE_FORMAT_DIALOG)
     private WebElement mappingFileFormatDialog;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newElementButton_button")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newElementButton_button")
     private WebElement newElementButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newProjectButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newProjectButton")
     private WebElement newProjectButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newLtpValidationConfigurationButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newLtpValidationConfigurationButton")
     private WebElement newLtpValidationConfigurationButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newTemplateButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newTemplateButton")
     private WebElement newTemplateButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newWorkflowButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newWorkflowButton")
     private WebElement newWorkflowButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newDocketButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newDocketButton")
     private WebElement newDocketButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(id = "projectForm:newRulesetButton")
+    @SuppressWarnings(UNUSED)
+    @FindBy(id = "newElementForm:newRulesetButton")
     private WebElement newRulesetButton;
 
-    @FindBy(id = "projectForm:newOpacConfigurationButton")
+    @FindBy(id = "newElementForm:newOpacConfigurationButton")
     private WebElement newImportConfigurationButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "convertMenu:convertCatalogConfigurations")
     private WebElement importOpacConfigsButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "importCatalogConfigurationsForm:catalogConfigurationSelection")
     private WebElement catalogSelection;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "importCatalogConfigurationsForm:startCatalogConfigurationsImport")
     private WebElement startOpacConfigurationImportButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "mappingFileFormatsForm:mappingFileTitle")
     private WebElement mappingFileTitle;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "mappingFileFormatsForm:inputFormat")
     private WebElement mappingFileInputFormatMenu;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "mappingFileFormatsForm:outputFormat")
     private WebElement mappingFileOutputFormatMenu;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "mappingFileFormatsForm:ok")
     private WebElement mappingFileOkButton;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/projectEdit.jsf?referer=projects&id=1']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/projectEdit') and contains(@href, 'id=1')]")
     private WebElement editProjectLink;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/templateEdit.jsf?id=4']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/templateEdit') and contains(@href, 'id=4')]")
     private WebElement editTemplateLink;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/workflowEdit.jsf?id=2']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/workflowEdit') and contains(@href, 'id=2')]")
     private WebElement editWorkflowLink;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/docketEdit.jsf?id=1']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/docketEdit') and contains(@href, 'id=1')]")
     private WebElement editDocketLink;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/rulesetEdit.jsf?id=1']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/rulesetEdit') and contains(@href, 'id=1')]")
     private WebElement editRulesetLink;
 
-    @SuppressWarnings("unused")
-    @FindBy(xpath = "//a[@href='/kitodo/pages/importConfigurationEdit.jsf?id=1']")
+    @SuppressWarnings(UNUSED)
+    @FindBy(xpath = "//a[contains(@href, '/kitodo/pages/importConfigurationEdit') and contains(@href, 'id=1')]")
     private WebElement editImportConfigurationLink;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TEMPLATE_TABLE + ":0:templateActionForm:action22")
     private WebElement createProcess;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = PROJECTS_TABLE + ":0:projectActionForm:deleteProject")
     private WebElement deleteFirstProjectButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = DOCKET_TABLE + ":0:actionForm:deleteDocket")
     private WebElement deleteFirstDocketButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = RULESET_TABLE + ":0:actionForm:deleteRuleset")
     private WebElement deleteFirstRulesetButton;
 
@@ -191,7 +192,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
     private WebElement toggleHiddenTemplatesWrapper;
 
     public ProjectsPage() {
-        super("pages/projects.jsf");
+        super("pages/projects");
     }
 
     /**
@@ -330,7 +331,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
         await("Wait for project table row to be expanded").atMost(3, TimeUnit.SECONDS)
                 .untilAsserted(() -> assertTrue(Browser.getDriver().findElement(By.id(elementId)).isDisplayed()));
         WebElement detailsTable = Browser.getDriver().findElement(By.id(elementId));
-        return getTableDataByColumn(detailsTable, 1);
+        return getGridData(detailsTable);
     }
 
     public List<String> getProjectTemplates() {
@@ -343,11 +344,19 @@ public class ProjectsPage extends Page<ProjectsPage> {
 
     public List<String> getTemplateDetails() {
         int index = triggerRowToggle(templatesTable, "Fourth template");
-        WebElement detailsTable = Browser.getDriver()
-                .findElement(By.id(TEMPLATE_TABLE + ":" + index + ":templateRowExpansionTable"));
-        List<String> details = getTableDataByColumn(detailsTable, 1);
-        details.addAll(getTableDataByColumn(detailsTable, 3));
-        return details;
+        String elementId =
+                TEMPLATE_TABLE + ":" + index + ":templateRowExpansionTable";
+        await()
+                .atMost(5, TimeUnit.SECONDS)
+                .untilAsserted(() ->
+                        assertTrue(
+                                Browser.getDriver()
+                                        .findElement(By.id(elementId))
+                                        .isDisplayed()));
+        WebElement detailsTable =
+                Browser.getDriver().findElement(By.id(elementId));
+
+        return getGridData(detailsTable);
     }
 
     /**
@@ -621,7 +630,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      */
     public void selectInputFormatMods() {
         clickElement(mappingFileInputFormatMenu.findElement(By.cssSelector(CSS_SELECTOR_DROPDOWN_TRIGGER)));
-        clickElement(Browser.getDriver().findElementById(mappingFileInputFormatMenu.getAttribute("id") + "_1"));
+        clickElement(Browser.getDriver().findElement(By.id(mappingFileInputFormatMenu.getAttribute("id") + "_1")));
     }
 
     /**
@@ -629,7 +638,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      */
     public void selectOutputFormatKitodo() {
         clickElement(mappingFileOutputFormatMenu.findElement(By.cssSelector(CSS_SELECTOR_DROPDOWN_TRIGGER)));
-        clickElement(Browser.getDriver().findElementById(mappingFileOutputFormatMenu.getAttribute("id") + "_5"));
+        clickElement(Browser.getDriver().findElement(By.id(mappingFileOutputFormatMenu.getAttribute("id") + "_5")));
     }
 
     /**
@@ -646,7 +655,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      */
     public boolean allCatalogsImportedSuccessfully(List<String> catalogTitles) {
         for (String catalog : catalogTitles) {
-            WebElement catalogCell = Browser.getDriver().findElementById("importResultsForm:successfulImports")
+            WebElement catalogCell = Browser.getDriver().findElement(By.id("importResultsForm:successfulImports"))
                     .findElement(By.xpath(".//span[@title='" + catalog + "']"));
             if (Objects.isNull(catalogCell)) {
                 return false;
@@ -660,7 +669,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      * @return catalog configuration import error messages
      */
     public List<String> getCatalogConfigurationImportErrorsMessages() {
-        List<WebElement> errorMessages = Browser.getDriver().findElementById("importResultsForm:failedImports")
+        List<WebElement> errorMessages = Browser.getDriver().findElement(By.id("importResultsForm:failedImports"))
                 .findElements(By.xpath(".//td[@class='error-message-column']/span"));
         return errorMessages.stream().map(WebElement::getText).collect(Collectors.toList());
     }
@@ -669,7 +678,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      * Close results dialog.
      */
     public void closeResultsDialog() {
-        WebElement closeButton = Browser.getDriver().findElementById("close");
+        WebElement closeButton = Browser.getDriver().findElement(By.id("close"));
         await("Wait for 'Close' button to be displayed")
                 .atMost(3, TimeUnit.SECONDS).untilAsserted(() -> assertTrue(closeButton.isDisplayed()));
         closeButton.click();
@@ -680,7 +689,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      * @return number of ImportConfiguration entries in ImportConfiguration list
      */
     public Long getNumberOfImportConfigurations() {
-        return (long) Browser.getRowsOfTable(Browser.getDriver().findElementById(IMPORT_CONFIGURATIONS_TABLE)).size();
+        return (long) Browser.getRowsOfTable(Browser.getDriver().findElement(By.id(IMPORT_CONFIGURATIONS_TABLE))).size();
     }
 
     /**
@@ -688,7 +697,7 @@ public class ProjectsPage extends Page<ProjectsPage> {
      * @return number of MappingFile entries in MappingFile list
      */
     public Long getNumberOfMappingFiles() {
-        return (long) Browser.getRowsOfTable(Browser.getDriver().findElementById(MAPPING_FILE_TABLE)).size();
+        return (long) Browser.getRowsOfTable(Browser.getDriver().findElement(By.id(MAPPING_FILE_TABLE))).size();
     }
 
     /**
@@ -711,9 +720,9 @@ public class ProjectsPage extends Page<ProjectsPage> {
      */
     public void clickMassImportAction() {
         // click "mass import" icon
-        List<WebElement> massImportLinks = Browser.getDriver().findElementsByCssSelector(MASS_IMPORT_LINK);
+        List<WebElement> massImportLinks = Browser.getDriver().findElements(By.cssSelector(MASS_IMPORT_LINK));
         assert(!massImportLinks.isEmpty());
-        WebElement massImportLink = massImportLinks.get(0);
+        WebElement massImportLink = massImportLinks.getFirst();
         massImportLink.click();
 
         // open template selection menu

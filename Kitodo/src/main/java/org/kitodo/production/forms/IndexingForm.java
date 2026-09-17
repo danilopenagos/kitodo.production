@@ -17,14 +17,15 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.Objects;
 
-import javax.enterprise.context.ApplicationScoped;
-import javax.faces.push.Push;
-import javax.faces.push.PushContext;
-import javax.inject.Inject;
-import javax.inject.Named;
 import javax.json.Json;
 import javax.json.JsonArray;
 import javax.json.JsonArrayBuilder;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.faces.push.Push;
+import jakarta.faces.push.PushContext;
+import jakarta.inject.Inject;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -172,7 +173,7 @@ public class IndexingForm {
      */
     public void startAllIndexing() {
         indexingStartedTime = LocalDateTime.now();
-        indexingStartedUser = ServiceManager.getUserService().getAuthenticatedUser().getFullName();
+        indexingStartedUser = ServiceManager.getUserService().getCurrentUser().getFullName();
         for (IndexingRow indexingRow : indexingRows.values()) {
             if (!indexingRow.isIndexingInProgress()) {
                 indexingRow.callIndexing();

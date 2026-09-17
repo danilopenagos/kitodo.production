@@ -29,6 +29,7 @@
         <h:body styleClass="#{LoginForm.firstVisit ? 'first-visit' : ''}" lang="#{LanguageForm.locale}">
             <h:outputStylesheet name="css/kitodo.css"/>
             <h:outputStylesheet name="css/pattern-library.css"/>
+            <h:outputStylesheet library="webjars" name="font-awesome/4.7.0/css/font-awesome-jsf.css" />
             <p:ajaxStatus onstart="$('html').addClass('progressCursor')"
                           oncomplete="$('html').removeClass('progressCursor')" />
             <p:growl id="notifications" widgetVar="notifications" severity="info" escape="false"/>
@@ -52,7 +53,7 @@
                         </ui:insert>
                         <section id="breadcrumbs">
                             <h:form id="breadcrumbForm">
-                                <p:breadCrumb id="breadcrumbMenu" styleClass="breadcrumb-menu">
+                                <p:breadCrumb id="breadcrumbMenu" >
                                     <ui:insert name="breadcrumbs"/>
                                 </p:breadCrumb>
                             </h:form>
@@ -83,17 +84,20 @@
             <o:highlight styleClass="ui-state-error" />
             <ui:fragment id="activityMonitors"
                          rendered="#{not empty SessionClientController.currentSessionClient and session.maxInactiveInterval gt 0}">
-                <p:idleMonitor timeout="#{(session.maxInactiveInterval - SessionClientController.getAutomaticLogoutWarningSeconds()) * 1000}"
-                               multiWindowSupport="true"
-                               onidle="PF('logoutTimer').start()"
-                               onactive="PF('logoutTimer').pause()">
-                    <p:ajax event="idle"
-                            listener="#{activityMonitor.onIdle}"/>
-                    <p:ajax event="active"
-                            oncomplete="PF('logoutTimer').currentTimeout = #{SessionClientController.getAutomaticLogoutWarningSeconds()};"
-                            listener="#{activityMonitor.onActive}"
-                            update="sticky-notifications"/>
-                </p:idleMonitor>
+                <h:form id="activityMonitorForm">
+                    <p:idleMonitor timeout="#{(session.maxInactiveInterval - SessionClientController.getAutomaticLogoutWarningSeconds()) * 1000}"
+                                   id="activityMonitor"
+                                   multiWindowSupport="true"
+                                   onidle="PF('logoutTimer').start()"
+                                   onactive="PF('logoutTimer').pause()">
+                        <p:ajax event="idle"
+                                listener="#{activityMonitor.onIdle}"/>
+                        <p:ajax event="active"
+                                oncomplete="PF('logoutTimer').currentTimeout = #{SessionClientController.getAutomaticLogoutWarningSeconds()};"
+                                listener="#{activityMonitor.onActive}"
+                                update="sticky-notifications"/>
+                    </p:idleMonitor>
+                </h:form>
                 <h:form id="timerForm">
                     <pe:timer id="timer"
                               resetValues="pause"
@@ -103,7 +107,7 @@
                               timeout="#{SessionClientController.getAutomaticLogoutWarningSeconds()}"
                               update="sticky-notifications"
                               ontimerstep="updateLogoutCountdown(intervalData)"
-                              ontimercomplete="window.location.replace('/kitodo/logout');"/>
+                              ontimercomplete="$('#timerForm')[0].action='#{request.contextPath}/logout';$('#timerForm')[0].submit();"/>
                 </h:form>
             </ui:fragment>
         </h:body>

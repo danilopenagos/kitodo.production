@@ -15,23 +15,28 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.kitodo.SecurityTestUtils;
 import org.kitodo.data.database.beans.User;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.selenium.testframework.BaseTestSelenium;
+import org.kitodo.selenium.testframework.Browser;
 import org.kitodo.selenium.testframework.Pages;
 import org.kitodo.selenium.testframework.pages.DesktopPage;
+import org.kitodo.selenium.testframework.pages.ProjectEditPage;
 import org.kitodo.selenium.testframework.pages.ProcessesPage;
 import org.kitodo.selenium.testframework.pages.ProjectsPage;
 import org.kitodo.selenium.testframework.pages.TasksPage;
 import org.kitodo.selenium.testframework.pages.TemplateEditPage;
 import org.kitodo.selenium.testframework.pages.UsersPage;
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
 
 public class ListingST extends BaseTestSelenium {
 
@@ -50,12 +55,20 @@ public class ListingST extends BaseTestSelenium {
         usersPage = Pages.getUsersPage();
     }
 
-    @BeforeAll
-    public static void login() throws Exception {
+    @BeforeEach
+    public void login() throws Exception {
         Pages.getLoginPage().goTo().performLoginAsAdmin();
 
         User user = ServiceManager.getUserService().getByLogin("kowal");
         SecurityTestUtils.addUserDataToSecurityContext(user, 1);
+    }
+
+    @AfterEach
+    public void logout() throws Exception {
+        Pages.getTopNavigation().logout();
+        if (Browser.isAlertPresent()) {
+            Browser.getDriver().switchTo().alert().accept();
+        }
     }
 
     @AfterAll
@@ -85,8 +98,8 @@ public class ListingST extends BaseTestSelenium {
         assertEquals(projectsInDatabase, projectsDisplayed, "Displayed wrong number of projects");
 
         String query = "SELECT t FROM Task AS t INNER JOIN t.roles AS r WITH r.id = 1"
-                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser = 1 OR r.id = 1)"
-                + " AND (t.processingStatus = 1 OR t.processingStatus = 2) AND t.typeAutomatic = 0";
+                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser.id = 1 OR r.id = 1)"
+                + " AND (t.processingStatus = 1 OR t.processingStatus = 2) AND t.typeAutomatic = false";
 
         int tasksInDatabase = ServiceManager.getTaskService().getByQuery(query).size();
         int tasksDisplayed = desktopPage.countListedTasks();
@@ -98,7 +111,7 @@ public class ListingST extends BaseTestSelenium {
         List<String> statistics = desktopPage.getStatistics();
 
         long countInDatabase = ServiceManager.getTaskService().count();
-        long countDisplayed = Long.parseLong(statistics.get(0));
+        long countDisplayed = Long.parseLong(statistics.getFirst());
         assertEquals(countInDatabase, countDisplayed, "Displayed wrong count for task statistics");
 
         countInDatabase = ServiceManager.getUserService().count();
@@ -140,8 +153,8 @@ public class ListingST extends BaseTestSelenium {
         tasksPage.goTo();
 
         String query = "SELECT t FROM Task AS t INNER JOIN t.roles AS r WITH r.id = 1"
-                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser = 1 OR r.id = 1)"
-                + " AND (t.processingStatus = 1 OR t.processingStatus = 2) AND t.typeAutomatic = 0";
+                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser.id = 1 OR r.id = 1)"
+                + " AND (t.processingStatus = 1 OR t.processingStatus = 2) AND t.typeAutomatic = false";
 
         int tasksInDatabase = ServiceManager.getTaskService().getByQuery(query).size();
         int tasksDisplayed = tasksPage.countListedTasks();
@@ -158,8 +171,8 @@ public class ListingST extends BaseTestSelenium {
         tasksPage.applyFilterShowOnlyOpenTasks();
 
         query = "SELECT t FROM Task AS t INNER JOIN t.roles AS r WITH r.id = 1"
-                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser = 1 OR r.id = 1) AND "
-                + "t.processingStatus = 1 AND t.typeAutomatic = 0";
+                + " INNER JOIN t.process AS p WITH p.id IS NOT NULL WHERE (t.processingUser.id = 1 OR r.id = 1) AND "
+                + "t.processingStatus = 1 AND t.typeAutomatic = false";
         tasksInDatabase = ServiceManager.getTaskService().getByQuery(query).size();
         tasksDisplayed = tasksPage.countListedTasks();
         assertEquals(tasksInDatabase, tasksDisplayed, "Displayed wrong number of tasks with applied filter");
@@ -177,26 +190,25 @@ public class ListingST extends BaseTestSelenium {
 
         List<String> detailsProject = projectsPage.getProjectDetails();
         assertEquals(1, detailsProject.size(), "Displayed wrong number of project's details");
-        assertEquals("Test Owner", detailsProject.get(0), "Displayed wrong project's METS owner");
+        assertEquals("Test Owner", detailsProject.getFirst(), "Displayed wrong project's METS owner");
 
         List<String> templatesProject = projectsPage.getProjectTemplates();
         assertEquals(2, templatesProject.size(), "Displayed wrong number of project's templates");
         assertEquals("Fourth template", templatesProject.get(1), "Displayed wrong project's template");
 
-        int templatesInDatabase = ServiceManager.getTemplateService().getAll().stream()
-                .filter(template -> template.getClient().getId() == 1).collect(Collectors.counting()).intValue();
-        int templatesDisplayed = projectsPage.countListedTemplates();
+        projectsPage.goToTemplateTab();
+        pollAssertTrue(() -> Browser.getDriver().findElement(By.id("templateTab")).isDisplayed());
 
         List<String> detailsTemplate =  projectsPage.getTemplateDetails();
-        //TODO: find way to read this table without exception
-        //assertEquals("Displayed wrong number of template's details", 4, detailsTemplate.size());
-        //assertEquals("Displayed wrong template's workflow", "", detailsTemplate.get(0));
-        //assertEquals("Displayed wrong template's ruleset", "SLUBHH", detailsTemplate.get(1));
-        //assertEquals("Displayed wrong template's docket", "second", detailsTemplate.get(2));
-        //assertEquals("Displayed wrong template's project", "First project", detailsTemplate.get(2));
+        assertEquals(4, detailsTemplate.size(), "Displayed wrong number of template's details");
+        assertEquals("second", detailsTemplate.get(0), "Displayed wrong template's docket");
+        assertEquals("SUBHH", detailsTemplate.get(1), "Displayed wrong template's ruleset");
+        assertEquals("", detailsTemplate.get(2), "Displayed wrong template's workflow");
+        assertEquals("First project", detailsTemplate.get(3), "Displayed wrong template's project");
 
-        int workflowsInDatabase = ServiceManager.getWorkflowService().getAll().stream()
-                .filter(workflow -> workflow.getClient().getId() == 1).collect(Collectors.counting()).intValue();
+    int workflowsInDatabase = (int) ServiceManager.getWorkflowService().getAll().stream()
+        .filter(workflow -> workflow.getClient().getId() == 1)
+        .count();
         int workflowsDisplayed = projectsPage.countListedWorkflows();
         assertEquals(workflowsInDatabase, workflowsDisplayed, "Displayed wrong number of workflows");
 
@@ -219,6 +231,28 @@ public class ListingST extends BaseTestSelenium {
         int batchesInDatabase = ServiceManager.getBatchService().getAll().size();
         int batchesDisplayed = processesPage.countListedBatches();
         assertEquals(batchesInDatabase, batchesDisplayed, "Displayed wrong number of batches");
+    }
+
+    @Test
+    public void listProcessesWithInactiveProjectTest() throws Exception {
+        projectsPage.goTo();
+        ProjectEditPage projectEditPage = projectsPage.editProject();
+        projectEditPage.toggleProjectActiveCheckbox();
+        projectEditPage.save();
+
+        processesPage.goTo();
+        // expect "1" instead of "0" because "No records found" message of empty table also takes up one row
+        assertEquals(1, processesPage.countListedProcesses(), "Processes of inactive projects should be hidden");
+
+        projectsPage.goTo();
+        projectsPage.editProject();
+        projectEditPage.toggleProjectActiveCheckbox();
+        projectEditPage.save();
+
+        processesPage.goTo();
+        long processesInDatabase = ServiceManager.getProcessService().countResults(null);
+        assertEquals(processesInDatabase, processesPage.countListedProcesses(),
+                "Processes should be visible again after project reactivation");
     }
 
     @Test
@@ -258,5 +292,36 @@ public class ListingST extends BaseTestSelenium {
         projectsPage.goToTemplateTab();
         projectsPage.toggleHiddenTemplates();
         assertEquals(2, projectsPage.getTemplateTitles().size(), "Wrong number of templates after toggling hidden templates");
+    }
+
+    /**
+     * Verify that all details are shown on the 'current task' page.
+     *
+     * @throws Exception when thread is interrupted or tasks cannot be loaded.
+     */
+    @Test
+    public void listCurrentTaskDetailsTest() throws Exception {
+        tasksPage.goTo().takeOpenTask("Open", "First process");
+        pollAssertTrue(() -> Browser.getDriver().findElement(By.id("tasksTabView")).isDisplayed());
+
+        // first check table headers
+        List<WebElement> taskDetailHeaders = Browser.getDriver().findElements(By.cssSelector("#tasksTabView\\:taskDetails_head th"));
+        assertEquals(6, taskDetailHeaders.size(), "Wrong number of task details headers");
+        assertEquals("Titel", taskDetailHeaders.get(0).getText(), "Wrong first task details header");
+        assertEquals("Vorgangstitel", taskDetailHeaders.get(1).getText(), "Wrong second task details header");
+        assertEquals("Vorgangs-ID", taskDetailHeaders.get(2).getText(), "Wrong third task details header");
+        assertEquals("Reihenfolge", taskDetailHeaders.get(3).getText(), "Wrong fourth task details header");
+        assertEquals("Korrektur", taskDetailHeaders.get(4).getText(), "Wrong fifth task details header");
+        assertEquals("Status", taskDetailHeaders.get(5).getText(), "Wrong sixth task details header");
+
+        // then check table contents
+        List<WebElement> taskDetails = Browser.getDriver().findElements(By.cssSelector("#tasksTabView\\:taskDetails td[role='gridcell']"));
+        assertEquals(6, taskDetails.size(), "Wrong number of task details");
+        assertEquals("Open", taskDetails.get(0).getText(), "Wrong task title");
+        assertEquals("First process", taskDetails.get(1).getText(), "Wrong process title");
+        assertEquals("1", taskDetails.get(2).getText(), "Wrong process ID");
+        assertEquals("4", taskDetails.get(3).getText(), "Wrong task order");
+        assertEquals("", taskDetails.get(4).getText(), "Wrong task correction status");
+        assertEquals("In Bearbeitung", taskDetails.get(5).getText(), "Wrong task status");
     }
 }

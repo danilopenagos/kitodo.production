@@ -17,7 +17,7 @@
         xmlns:h="http://xmlns.jcp.org/jsf/html"
         xmlns:p="http://primefaces.org/ui">
     <f:view>
-        <p:row>
+        <p:panel styleClass="column-wrapper">
             <div>
                 <p:outputLabel for="fileFormat"
                                value="#{msgs['importConfig.field.fileFormat']} *"/>
@@ -82,8 +82,19 @@
                 <p:tooltip for="parentMappingFileHelp"
                            value="#{msgs['tooltip.importConfig.parentMappingFileHelp']}"/>
             </div>
-        </p:row>
-        <p:row>
+            <div>
+                <p:outputLabel for="validateExternalData" value="#{msgs['importConfig.field.validateExternalData']}" />
+                <p:selectBooleanCheckbox id="validateExternalData" styleClass="switch input-with-button"
+                                         value="#{importConfigurationEditView.importConfiguration.validateExternalData}">
+                    <p:ajax event="change" oncomplete="toggleSave()"/>
+                </p:selectBooleanCheckbox>
+                <p:commandButton id="validateExternalDataHelp" type="button"
+                                 styleClass="help-button" icon="fa fa-lg fa-question-circle-o"/>
+                <p:tooltip for="validateExternalDataHelp"
+                           value="#{msgs['tooltip.importConfig.validateExternalDataHelp']}"/>
+            </div>
+        </p:panel>
+        <p:panel styleClass="column-wrapper">
             <div>
                 <p:outputLabel for="metadataFormat"
                                value="#{msgs['importConfig.field.metadataFormat']} *"/>
@@ -138,6 +149,6 @@
                 <p:tooltip for="defaultImportDepthHelpButton"
                            value="#{msgs['tooltip.importConfig.defaultImportDepthHelp']}"/>
             </div>
-        </p:row>
+        </p:panel>
     </f:view>
 </ui:composition>

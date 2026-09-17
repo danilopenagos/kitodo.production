@@ -56,7 +56,7 @@ public class CommentServiceIT {
     }
 
     /**
-     * Tests wether comment is correctly saved and removed from database.
+     * Tests whether comment is correctly saved and removed from database.
      * 
      * @throws Exception
      *             when saving or deleting comment fails.
@@ -72,7 +72,7 @@ public class CommentServiceIT {
         comment.setCreationDate(new Date());
         comment.setType(CommentType.INFO);
         commentService.save(comment);
-        Comment newComment = commentService.getAll().get(0);
+        Comment newComment = commentService.getAll().getFirst();
         assertEquals("TEST_MESSAGE", newComment.getMessage(), "Comment was not found in database!");
 
         commentService.removeComment(newComment);

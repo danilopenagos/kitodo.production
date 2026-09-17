@@ -69,10 +69,13 @@ public class VariableReplacer {
     /**
      * This regular expression is used to search for placeholders that need to
      * be replaced.
+     * 
+     * <p>Uses regular expression possessive quantifier ++ in order to prevent
+     * possible denial of service attack from user input.
      */
     private static final Pattern VARIABLE_FINDER_REGEX = Pattern.compile(
             "(\\$?)\\((?:(prefs|processid|processtitle|projectid|stepid|stepname|generatorsource|generatorsourcepath|ocrdworkflowid)|"
-                    + "(?:(meta|process|product|template)\\.(?:(firstchild|topstruct)\\.)?([^)]+)|"
+                    + "(?:(meta|process|product|template)\\.(?:(firstchild|topstruct)\\.)?([^)]++)|"
                     + "(?:(filename|basename|relativepath))))\\)");
     /**
      * The map is filled with replacement instructions that are required for
@@ -150,7 +153,7 @@ public class VariableReplacer {
     }
     
     /**
-     * Replace variables withing a string. Like an ant, run through the variables
+     * Replace variables within a string. Like an ant, run through the variables
      * and fetch them from the digital document. Filename variables are replaced using the filename parameter.
      * 
      * @param stringWithVariables
@@ -414,14 +417,14 @@ public class VariableReplacer {
         List<LogicalDivision> allChildren = workpiece.getLogicalStructure().getChildren();
         String allFirstchildValue = null;
         if (!allChildren.isEmpty()) {
-            allFirstchildValue = MetadataEditor.getMetadataValue(allChildren.get(0), variableFinder.group(5));
+            allFirstchildValue = MetadataEditor.getMetadataValue(allChildren.getFirst(), variableFinder.group(5));
             if (Objects.isNull(allFirstchildValue)) {
                 allFirstchildValue = determineReplacementForTopstruct(variableFinder, dollarSignIfToKeep);
             }
             if (StringUtils.isEmpty(allFirstchildValue)) {
-                List<LogicalDivision> firstChildChildren = allChildren.get(0).getChildren();
+                List<LogicalDivision> firstChildChildren = allChildren.getFirst().getChildren();
                 if (!firstChildChildren.isEmpty()) {
-                    allFirstchildValue = MetadataEditor.getMetadataValue(firstChildChildren.get(0), variableFinder.group(5));
+                    allFirstchildValue = MetadataEditor.getMetadataValue(firstChildChildren.getFirst(), variableFinder.group(5));
                 }
             }
         }
@@ -444,7 +447,7 @@ public class VariableReplacer {
                 variableFinder.group());
             return failureResult;
         }
-        String value = MetadataEditor.getMetadataValue(firstchildChildren.get(0), variableFinder.group(5));
+        String value = MetadataEditor.getMetadataValue(firstchildChildren.getFirst(), variableFinder.group(5));
         if (Objects.isNull(value)) {
             logger.warn("Cannot replace \"{}\": No such metadata entry in the first division", variableFinder.group());
             return failureResult;

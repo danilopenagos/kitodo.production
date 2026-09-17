@@ -320,7 +320,7 @@ public class WorkflowControllerServiceIT {
     }
 
     @Test
-    public void shouldCloseForProcessWithSkippedTask() throws DAOException, IOException {
+    public void shouldCloseForProcessWithSkippedTask() throws Exception {
         int processId = MockDatabase.insertTestProcess("Test process", 1, 1, 1);
         Process process = ServiceManager.getProcessService().getById(processId);
         process.getTasks().clear();
@@ -437,7 +437,7 @@ public class WorkflowControllerServiceIT {
 
         workflowService.unassignTaskFromUser(task);
         assertNull(task.getProcessingUser(), "User was not unassigned from the task!");
-        assertEquals(TaskStatus.OPEN, task.getProcessingStatus(), "Task was not set up to open after unassing of the user!");
+        assertEquals(TaskStatus.OPEN, task.getProcessingStatus(), "Task was not set up to open after unassign of the user!");
     }
 
     @Test
@@ -500,7 +500,7 @@ public class WorkflowControllerServiceIT {
     }
 
     @Test
-    public void shouldGetCorrectCommentStatus() throws DAOException, IOException {
+    public void shouldGetCorrectCommentStatus() throws Exception {
         Comment correctionComment = prepareCorrectionComment();
         workflowService.reportProblem(correctionComment, TaskEditType.MANUAL_SINGLE);
         assertEquals(CorrectionComments.OPEN_CORRECTION_COMMENTS, ProcessConverter

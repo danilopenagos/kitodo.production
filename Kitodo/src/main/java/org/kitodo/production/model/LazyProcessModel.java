@@ -13,20 +13,31 @@ package org.kitodo.production.model;
 
 import static java.lang.Math.toIntExact;
 
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.StringUtils;
+import org.kitodo.data.database.beans.Process;
+import org.kitodo.data.database.beans.Role;
+import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.data.database.persistence.TaskDAO;
 import org.kitodo.exceptions.FilterException;
+import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.FilterService;
 import org.kitodo.production.services.data.ProcessService;
 import org.kitodo.utils.Stopwatch;
 import org.primefaces.PrimeFaces;
 import org.primefaces.model.FilterMeta;
+import org.primefaces.model.SortMeta;
 import org.primefaces.model.SortOrder;
 
 public class LazyProcessModel extends LazyBeanModel {
@@ -48,6 +59,11 @@ public class LazyProcessModel extends LazyBeanModel {
 
     private boolean showClosedProcesses = false;
     private boolean showInactiveProjects = false;
+
+    private Map<Integer, EnumMap<TaskStatus, Integer>> taskStatusCache = new HashMap<>();
+    private Map<Integer, Map<TaskStatus, List<String>>> taskTitleCache = new HashMap<>();
+    private Set<Integer> processesWithChildren = new HashSet<>();
+    private Set<Integer> processesWithVisibleTasks = new HashSet<>();
 
     /**
      * Creates a lazyBeanModel instance that allows fetching data from the data
@@ -109,16 +125,28 @@ public class LazyProcessModel extends LazyBeanModel {
     }
 
     @Override
+    public int count(Map<String, FilterMeta> filterBy) {
+        // count handled via load() + setRowCount()
+        return 0;
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
-    public List<Object> load(int first, int pageSize, String sortField, SortOrder sortOrder,
-            Map<String, FilterMeta> filters) {
+    public List<Object> load(int first, int pageSize, Map<String, SortMeta> sortBy, Map<String, FilterMeta> filters) {
+        String sortField = "";
+        SortOrder sortOrder = SortOrder.ASCENDING;
         Stopwatch stopwatch = new Stopwatch(this, "load", "first", Integer.toString(first), "pageSize", Integer
                 .toString(pageSize), "sortField", sortField, "sortOrder", Objects.toString(sortOrder), "filters",
                 Objects.toString(filters));
-        // reverse sort order for some process list columns such that first click on column yields more useful ordering
-        if (sortField.equals(CORRECTION_COMMENT_STATUS_FIELD) || sortField.equals(PROGRESS_COMBINED_FIELD)
-                || sortField.equals(CREATION_DATE_FIELD)) {
-            sortOrder = sortOrder.equals(SortOrder.ASCENDING) ? SortOrder.DESCENDING : SortOrder.ASCENDING;
+        if (!sortBy.isEmpty()) {
+            SortMeta sortMeta = sortBy.values().iterator().next();
+            sortField = sortMeta.getField();
+            sortOrder = sortMeta.getOrder();
+            // reverse sort order for some process list columns such that first click on column yields more useful ordering
+            if (sortField.equals(CORRECTION_COMMENT_STATUS_FIELD) || sortField.equals(PROGRESS_COMBINED_FIELD)
+                    || sortField.equals(CREATION_DATE_FIELD)) {
+                sortOrder = sortOrder.equals(SortOrder.ASCENDING) ? SortOrder.DESCENDING : SortOrder.ASCENDING;
+            }
         }
         try {
             HashMap<String, String> filterMap = new HashMap<>();
@@ -129,6 +157,14 @@ public class LazyProcessModel extends LazyBeanModel {
                 this.showInactiveProjects)));
             entities = ((ProcessService) searchService).loadData(first, pageSize, sortField, sortOrder, filterMap,
                 this.showClosedProcesses, this.showInactiveProjects);
+            PrimeFaces.current()
+                    .executeScript("updateProcessCount()");
+            List<Integer> ids = new ArrayList<>();
+            for (Object o : entities) {
+                Process process = (Process) o;
+                ids.add(process.getId());
+            }
+            loadProcessCaches(ids);
             logger.trace("{} entities loaded!", entities.size());
             return stopwatch.stop(entities);
         } catch (DAOException e) {
@@ -143,6 +179,24 @@ public class LazyProcessModel extends LazyBeanModel {
         return stopwatch.stop(new LinkedList<>());
     }
 
+    private void loadProcessCaches(List<Integer> processIds) throws DAOException {
+        taskStatusCache = new TaskDAO().loadTaskStatusCountsForProcesses(processIds);
+        taskTitleCache = ServiceManager.getTaskService()
+                .loadTaskTitlesForProcesses(processIds);
+        processesWithChildren = ServiceManager.getProcessService()
+                .findProcessIdsWithChildren(processIds);
+
+        List<Integer> userRoleIds = ServiceManager.getUserService()
+                .getCurrentUser()
+                .getRoles()
+                .stream()
+                .map(Role::getId)
+                .collect(Collectors.toList());
+
+        processesWithVisibleTasks = ServiceManager.getProcessService()
+                .findProcessIdsWithVisibleTasks(processIds, userRoleIds);
+    }
+
     @Override
     public Object getRowData() {
         Stopwatch stopwatch = new Stopwatch(this, "getRowData");
@@ -153,4 +207,43 @@ public class LazyProcessModel extends LazyBeanModel {
             return stopwatch.stop(null);
         }
     }
+
+    /**
+     * Returns the cached task titles grouped by process ID and task status.
+     *
+     * @return map of process ID to task titles grouped by Taskstatus
+     */
+    public Map<Integer, Map<TaskStatus, List<String>>> getTaskTitleCache() {
+        return taskTitleCache;
+    }
+
+    /**
+     * Returns the cached task status counts for the given process.
+     *
+     * @param process the process whose task status counts are requested
+     * @return map of TaskStatus to count
+     */
+    public EnumMap<TaskStatus, Integer> getTaskStatusCounts(Process process) {
+        return taskStatusCache.get(process.getId());
+    }
+
+    /**
+     * Returns the IDs of processes that have at least one child process.
+     *
+     * @return set of process IDs with children
+     */
+    public Set<Integer> getProcessesWithChildren() {
+        return processesWithChildren;
+    }
+
+    /**
+     * Checks whether the given process has any visible tasks.
+     *
+     * @param process the process to check
+     * @return true if the process has visible tasks, false otherwise
+     */
+    public boolean hasVisibleTasks(Process process) {
+        return processesWithVisibleTasks.contains(process.getId());
+    }
+
 }

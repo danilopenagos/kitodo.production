@@ -14,6 +14,7 @@ package org.kitodo.selenium.testframework.pages;
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -22,6 +23,7 @@ import org.kitodo.selenium.testframework.Browser;
 import org.kitodo.selenium.testframework.Pages;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
+import org.openqa.selenium.Platform;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
@@ -34,11 +36,11 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
     private static final String SAVE_AND_EXIT_BUTTON_ID = "buttonForm:saveExit";
     private static final String LOGICAL_TREE = "logicalTree";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "structureTreeForm")
     private WebElement structureTreeForm;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "numberOfScans")
     private WebElement numberOfScans;
 
@@ -94,7 +96,7 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
     private WebElement imagePreviewButton;
 
     public MetadataEditorPage() {
-        super("metadataEditor.jsf");
+        super("metadataEditor");
     }
 
     @Override
@@ -199,7 +201,7 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
         moveAction.dragAndDrop(secondChildNode, dropArea).build().perform();
     }
 
-    public ProcessesPage saveAndExit() throws InstantiationException, IllegalAccessException {
+    public ProcessesPage saveAndExit() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveAndExitButton, Pages.getProcessesPage().getUrl());
         return Pages.getProcessesPage();
     }
@@ -253,7 +255,11 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
         ));
         Actions actions = new Actions(Browser.getDriver());
         if (withCtrl) {
-            actions = actions.keyDown(Keys.LEFT_CONTROL).click(treeNode).keyUp(Keys.LEFT_CONTROL); 
+            if (Platform.getCurrent().is(Platform.MAC)) {
+                actions = actions.keyDown(Keys.COMMAND).click(treeNode).keyUp(Keys.COMMAND);
+            } else {
+                actions = actions.keyDown(Keys.LEFT_CONTROL).click(treeNode).keyUp(Keys.LEFT_CONTROL);
+            }
         } else if (withShift) {
             actions = actions.keyDown(Keys.LEFT_SHIFT).click(treeNode).keyUp(Keys.LEFT_SHIFT);
         } else {
@@ -263,14 +269,14 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
     }
 
     /**
-     * Check that the provided number of pages are selected in the pagination panel.
+     * Check that the provided number of pages is selected in the logical structure tree.
      * 
-     * @param count the number of pages that should be selected in the pagination panel
+     * @param count the number of pages that should be selected in the logical structure tree
      */
-    public void checkPaginationSelection(int count) {
+    public void checkLogicalSelection(int count) {
         await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS)
             .until(() -> Browser.getDriver().findElements(
-                By.cssSelector("#paginationForm\\:paginationSelection .ui-chkbox-box.ui-state-active")
+                By.cssSelector("#logicalTree .ui-treenode.ui-treenode-selected")
             ).size() == count);
     }
 
@@ -321,6 +327,25 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
         await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS).until(
             () -> contextMenuLogicalTree.isDisplayed()
         );
+    }
+
+    /**
+     * Open context menu (right click) for linked child process with given process id.
+     *
+     * @param childProcessId ID of linked child process to open context menu for
+     */
+    public void openContextMenuForLinkedChildProcessById(int childProcessId) {
+        List<WebElement> linkedChildProcesses = Browser.getDriver().findElements(By.className("ui-treenode-label"));
+        for (WebElement linkedChildProcess : linkedChildProcesses) {
+            String linkedChildProcessText = linkedChildProcess.getText().strip();
+            if (linkedChildProcessText.startsWith("[" + childProcessId + "]")) {
+                new Actions(Browser.getDriver()).contextClick(linkedChildProcess).build().perform();
+                await().ignoreExceptions().pollDelay(100, TimeUnit.MILLISECONDS).atMost(5, TimeUnit.SECONDS).until(
+                        () -> contextMenuLogicalTree.isDisplayed()
+                );
+                break;
+            }
+        }
     }
 
     /**
@@ -378,14 +403,14 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
                         .findElement(By.id(SAVE_AND_EXIT_BUTTON_ID))::isDisplayed);
         WebElement contextMenu = Browser.getDriver().findElement(By.id("contextMenuLogicalTree"));
         List<WebElement> menuItems = contextMenu.findElements(By.className("ui-menuitem"));
-        assertEquals(3, menuItems.size(), "Wrong number of context menu items");
+        assertEquals(5, menuItems.size(), "Wrong number of context menu items");
         // click "add element" option
-        menuItems.get(0).click();
+        menuItems.getFirst().click();
         // open "structure element type selection" menu
         clickItemWhenDisplayed(By.id("dialogAddDocStrucTypeForm:docStructAddTypeSelection"), 1000, 1000, 5);
         // click first option
         clickItemWhenDisplayed(By.id("dialogAddDocStrucTypeForm:docStructAddTypeSelection_1"), 1000, 500, 3);
-        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), 3);
+        WebDriverWait wait = new WebDriverWait(Browser.getDriver(), Duration.ofSeconds(3));
         wait.until(ExpectedConditions.invisibilityOfElementLocated(By.id("dialogAddDocStrucTypeForm:docStructAddTypeSelection_1")));
         // add structure element with selected type by clicking "accept"/"apply" button
         Thread.sleep(1000);
@@ -444,8 +469,8 @@ public class MetadataEditorPage extends Page<MetadataEditorPage> {
         return thumbnailOverlay;
     }
 
-    private void clickItemWhenDisplayed(By selector, long delay, long intervall, long timeout) {
-        await().ignoreExceptions().pollDelay(delay, TimeUnit.MILLISECONDS).pollInterval(intervall, TimeUnit.MILLISECONDS)
+    private void clickItemWhenDisplayed(By selector, long delay, long interval, long timeout) {
+        await().ignoreExceptions().pollDelay(delay, TimeUnit.MILLISECONDS).pollInterval(interval, TimeUnit.MILLISECONDS)
                 .atMost(timeout, TimeUnit.SECONDS).until(Browser.getDriver().findElement(selector)::isDisplayed);
         Browser.getDriver().findElement(selector).click();
     }

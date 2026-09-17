@@ -15,12 +15,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-import javax.xml.bind.JAXBElement;
-import javax.xml.bind.JAXBException;
+import jakarta.xml.bind.JAXBElement;
+import jakarta.xml.bind.JAXBException;
 import javax.xml.transform.TransformerException;
 
 import org.apache.commons.io.IOUtils;
@@ -46,13 +47,15 @@ public class MetsKitodoConverterTest {
 
     @AfterEach
     public void revertFile() throws IOException {
-        IOUtils.write( testMetaOldFormat, Files.newOutputStream(Paths.get(pathOfOldMetaFormat)));
+        try (OutputStream out = Files.newOutputStream(Paths.get(pathOfOldMetaFormat))) {
+            IOUtils.write(testMetaOldFormat, out);
+        }
     }
 
     @Test
     public void shouldReadKitodoMetadataFormOldFormatFile() throws JAXBException, TransformerException, IOException {
         Mets mets = MetsKitodoConverter.convertToMetsKitodoByXslt(xmlfile, xsltFile);
-        JAXBElement jaxbElement = (JAXBElement) mets.getDmdSec().get(0).getMdWrap().getXmlData().getAny().get(0);
+        JAXBElement jaxbElement = (JAXBElement) mets.getDmdSec().getFirst().getMdWrap().getXmlData().getAny().getFirst();
         KitodoType kitodoType = (KitodoType) jaxbElement.getValue();
 
         MetadataType metadataType = kitodoType.getMetadata().get(1);
@@ -63,12 +66,12 @@ public class MetsKitodoConverterTest {
             metadataType.getValue(),
             "Reading content metadata out of kitodo format was not correct");
 
-        MetadataGroupType metadataGroup = kitodoType.getMetadataGroup().get(0);
+        MetadataGroupType metadataGroup = kitodoType.getMetadataGroup().getFirst();
         assertEquals("TypeOfResource",
             metadataGroup.getName(),
             "Converting of metadata group was wrong at name attribute");
         assertEquals("Handschrift",
-            metadataGroup.getMetadata().get(0).getValue(),
+            metadataGroup.getMetadata().getFirst().getValue(),
             "Converting of metadata group was wrong at metadata child element");
 
         MetadataGroupType personMetadataGroup = kitodoType.getMetadataGroup().get(1);
@@ -76,7 +79,7 @@ public class MetsKitodoConverterTest {
             personMetadataGroup.getName(),
             "Converting of person was wrong at name attribute");
         assertEquals("FormerOwner",
-            personMetadataGroup.getMetadata().get(0).getValue(),
+            personMetadataGroup.getMetadata().getFirst().getValue(),
             "Converting of person was wrong at metadata child element");
 
     }

@@ -16,12 +16,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 
-import javax.xml.bind.JAXBException;
+import jakarta.xml.bind.JAXBException;
 import javax.xml.datatype.DatatypeConfigurationException;
 import javax.xml.transform.TransformerException;
 
@@ -49,7 +50,9 @@ public class MetsKitodoWriterTest {
 
     @AfterEach
     public void revertFile() throws IOException {
-        IOUtils.write( testMetaOldFormat, Files.newOutputStream(Paths.get(pathOfOldMetaFormat)));
+        try (OutputStream out = Files.newOutputStream(Paths.get(pathOfOldMetaFormat))) {
+            IOUtils.write(testMetaOldFormat, out);
+        }
     }
 
     @BeforeAll
@@ -92,8 +95,8 @@ public class MetsKitodoWriterTest {
         MetsKitodoWrapper savedMetsKitodoWrapper = new MetsKitodoWrapper(xmlTestFile, xsltFile);
         Files.deleteIfExists(Paths.get(xmlTestFile));
 
-        String loadedMetadata = metsKitodoWrapper.getDmdSecs().get(0).getKitodoType().getMetadata().get(0).getValue();
-        String savedMetadata = metsKitodoWrapper.getDmdSecs().get(0).getKitodoType().getMetadata().get(0)
+        String loadedMetadata = metsKitodoWrapper.getDmdSecs().getFirst().getKitodoType().getMetadata().getFirst().getValue();
+        String savedMetadata = metsKitodoWrapper.getDmdSecs().getFirst().getKitodoType().getMetadata().getFirst()
                 .getValue();
 
         assertEquals(loadedMetadata,
@@ -125,8 +128,8 @@ public class MetsKitodoWriterTest {
         MetsKitodoWrapper savedMetsKitodoWrapper = new MetsKitodoWrapper(xmlTestFile, xsltFile);
         Files.deleteIfExists(Paths.get(xmlTestFile));
 
-        String loadedMetadata = metsKitodoWrapper.getDmdSecs().get(0).getKitodoType().getMetadata().get(0).getValue();
-        String savedMetadata = savedMetsKitodoWrapper.getDmdSecs().get(0).getKitodoType().getMetadata().get(0).getValue();
+        String loadedMetadata = metsKitodoWrapper.getDmdSecs().getFirst().getKitodoType().getMetadata().getFirst().getValue();
+        String savedMetadata = savedMetsKitodoWrapper.getDmdSecs().getFirst().getKitodoType().getMetadata().getFirst().getValue();
 
         assertEquals(loadedMetadata,
             savedMetadata,
@@ -136,7 +139,7 @@ public class MetsKitodoWriterTest {
             "The number of dmdSec elements of the loaded and the saved mets file are not equal");
 
         assertEquals(2,
-            metsKitodoWrapper.getMets().getMetsHdr().getAgent().get(0).getNote().size(),
+            metsKitodoWrapper.getMets().getMetsHdr().getAgent().getFirst().getNote().size(),
             "Conversion note was not inserted to mets header");
     }
 

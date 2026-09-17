@@ -1,0 +1,958 @@
+/*
+ * (c) Kitodo. Key to digital objects e. V. <contact@kitodo.org>
+ *
+ * This file is part of the Kitodo project.
+ *
+ * It is licensed under GNU General Public License version 3 or later.
+ *
+ * For the full copyright and license information, please read the
+ * GPL3-License.txt file that was distributed with this source code.
+ */
+
+package org.kitodo.production.forms;
+
+import java.io.IOException;
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Locale.LanguageRange;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.TreeMap;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import jakarta.faces.context.ExternalContext;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.model.SelectItem;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
+import jakarta.xml.bind.JAXBException;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.kitodo.config.xml.fileformats.FileFormat;
+import org.kitodo.config.xml.fileformats.FileFormatsConfig;
+import org.kitodo.data.database.beans.Folder;
+import org.kitodo.data.database.beans.ImportConfiguration;
+import org.kitodo.data.database.beans.LtpValidationConfiguration;
+import org.kitodo.data.database.beans.Project;
+import org.kitodo.data.database.beans.Template;
+import org.kitodo.data.database.beans.User;
+import org.kitodo.data.database.enums.PreviewHoverMode;
+import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.ProjectDeletionException;
+import org.kitodo.forms.FolderGenerator;
+import org.kitodo.production.controller.SecurityAccessController;
+import org.kitodo.production.enums.ObjectType;
+import org.kitodo.production.helper.Helper;
+import org.kitodo.production.model.LazyBeanModel;
+import org.kitodo.production.services.ServiceManager;
+import org.kitodo.production.services.data.ProjectService;
+
+@Named("ProjectEditView")
+@ViewScoped
+public class ProjectEditView extends BaseEditView {
+
+    public static final String VIEW_PATH = MessageFormat.format(REDIRECT_PATH, "projectEdit");
+
+    public static final String MIMETYPE_PREFIX_AUDIO = "audio";
+    private static final Logger logger = LogManager.getLogger(ProjectEditView.class);
+    public static final String MIMETYPE_PREFIX_VIDEO = "video";
+    private Project project;
+    private List<Template> deletedTemplates = new ArrayList<>();
+    private boolean locked = true;
+    private static final String TITLE_USED = "projectTitleAlreadyInUse";
+    private Boolean hasProcesses;
+    private String originalFileGroup;
+    private Project baseProject;
+
+    private static final String EMPTY_FILE_GROUP_SENTINEL = "__EMPTY_FILE_GROUP__";
+
+    /**
+     * The folder currently under edit in the pop-up dialog.
+     */
+    private List<Folder> workingFolders = new ArrayList<>();
+    private Folder editingFolder;
+    private FolderGenerator generator = new FolderGenerator(new Folder());
+
+    private boolean copyTemplates;
+
+    private String projectEditReferrer = DEFAULT_LINK;
+
+    /**
+     * Cash for the list of possible MIME types. So that the list does not have
+     * to be read from file several times for one page load.
+     */
+    private Map<String, String> mimeTypes = Collections.emptyMap();
+
+    /**
+     * Empty default constructor that also sets the LazyBeanModel instance of
+     * this bean.
+     */
+    public ProjectEditView() {
+        super();
+        super.setLazyBeanModel(new LazyBeanModel(ServiceManager.getProjectService()));
+    }
+
+
+    /**
+     * This needs to be executed in order to rollback adding of folders.
+     */
+    public void cancel() {
+        if (Objects.nonNull(this.project)) {
+            this.workingFolders = new ArrayList<>(this.project.getFolders());
+        } else {
+            this.workingFolders = new ArrayList<>();
+        }
+        this.editingFolder = null;
+    }
+
+    /**
+     * Gets the folder currently being modified within the edit dialog.
+     */
+    public Folder getEditingFolder() {
+        return this.editingFolder;
+    }
+
+    /**
+     * Sets the folder to be edited and initializes its associated content generator.
+     */
+    public void setEditingFolder(Folder folder) {
+        this.editingFolder = folder;
+        this.originalFileGroup = Objects.nonNull(folder) ? folder.getFileGroup() : null;
+        this.generator = new FolderGenerator(folder);
+    }
+
+    /**
+     * Returns the standard DFG file groups augmented with the current folder's group name.
+     */
+    public Collection<String> getAvailableFileGroups() {
+        Collection<String> fileGroups = Folder.getDefaultFileGroups();
+
+        if (Objects.nonNull(editingFolder)
+                && Objects.nonNull(editingFolder.getFileGroup())) {
+            fileGroups.add(editingFolder.getFileGroup());
+        }
+
+        return fileGroups;
+    }
+
+    /**
+     * Duplicate the selected project.
+     *
+     * @param itemId
+     *            ID of the project to duplicate
+     */
+    public void loadAsDuplicate(Integer itemId) {
+        setCopyTemplates(true);
+        this.locked = false;
+        try {
+            this.baseProject = ServiceManager.getProjectService().getById(itemId);
+            this.project = ServiceManager.getProjectService().duplicateProject(baseProject);
+            this.workingFolders = new ArrayList<>(project.getFolders());
+            this.setSaveDisabled(false);
+        } catch (DAOException e) {
+            Helper.setErrorMessage(ERROR_DUPLICATE, new Object[] {ObjectType.PROJECT.getTranslationSingular() }, logger,
+                e);
+        }
+    }
+
+    /**
+     * Saves current project if title is not empty and redirects to projects
+     * page.
+     *
+     * @return page or null
+     */
+    public String save() {
+        ServiceManager.getProjectService().evict(project);
+        if (isTitleValid()) {
+            try {
+                syncFoldersToProject();
+                ServiceManager.getProjectService().save(project);
+                commitTemplates();
+                User firstUser = addFirstUserToNewProject();
+                if (Objects.nonNull(firstUser)) {
+                    ServiceManager.getUserService().save(firstUser);
+                }
+                return getProjectEditReferrerViewPath();
+            } catch (DAOException e) {
+                Helper.setErrorMessage(ERROR_SAVING, new Object[] {ObjectType.PROJECT.getTranslationSingular() },
+                    logger, e);
+                return this.stayOnCurrentPage;
+            }
+        } else {
+            return this.stayOnCurrentPage;
+        }
+    }
+
+    /**
+     * Sync project folders with workingFolders using fileGroup as key.
+     * Removes folders deleted in UI and replaces existing ones with same fileGroup.
+     * Ensures exactly one folder per fileGroup is persisted.
+     */
+    private void syncFoldersToProject() {
+
+        List<Folder> removedFolders = project.getFolders().stream()
+                .filter(projectFolder ->
+                        workingFolders.stream().noneMatch(workingFolder ->
+                                (Objects.nonNull(projectFolder.getId())
+                                        && Objects.equals(projectFolder.getId(), workingFolder.getId()))
+                                        || projectFolder == workingFolder
+                        )
+                )
+                .toList();
+
+        removedFolders.forEach(this::clearFolderReferences);
+
+        project.getFolders().removeAll(removedFolders);
+
+        for (Folder workingFolder : workingFolders) {
+            boolean exists = project.getFolders().stream()
+                    .anyMatch(projectFolder ->
+                            (Objects.nonNull(projectFolder.getId())
+                                    && Objects.equals(projectFolder.getId(), workingFolder.getId()))
+                                    || projectFolder == workingFolder
+                    );
+
+            if (!exists) {
+                project.getFolders().add(workingFolder);
+            }
+        }
+    }
+
+    private void clearFolderReferences(Folder folder) {
+        if (Objects.equals(project.getPreview(), folder)) {
+            project.setPreview(null);
+        }
+        if (Objects.equals(project.getAudioPreview(), folder)) {
+            project.setAudioPreview(null);
+        }
+        if (Objects.equals(project.getVideoPreview(), folder)) {
+            project.setVideoPreview(null);
+        }
+        if (Objects.equals(project.getMediaView(), folder)) {
+            project.setMediaView(null);
+        }
+        if (Objects.equals(project.getAudioMediaView(), folder)) {
+            project.setAudioMediaView(null);
+        }
+        if (Objects.equals(project.getVideoMediaView(), folder)) {
+            project.setVideoMediaView(null);
+        }
+        if (Objects.equals(project.getGeneratorSource(), folder)) {
+            project.setGeneratorSource(null);
+        }
+    }
+
+
+
+    private void commitTemplates() throws DAOException {
+        if (copyTemplates) {
+            for (Template template : baseProject.getTemplates()) {
+                template.getProjects().add(project);
+                project.getTemplates().add(template);
+            }
+            setCopyTemplates(false);
+        }
+
+        for (Template template : project.getTemplates()) {
+            ServiceManager.getTemplateService().save(template);
+        }
+        for (Template template : deletedTemplates) {
+            ServiceManager.getTemplateService().save(template);
+        }
+
+        deletedTemplates = new ArrayList<>();
+    }
+
+    private boolean isTitleValid() {
+        String projectTitle = this.project.getTitle();
+        if (StringUtils.isNotBlank(projectTitle)) {
+            List<Project> projects = ServiceManager.getProjectService().getProjectsWithTitleAndClient(projectTitle,
+                    this.project.getClient().getId());
+            int count = projects.size();
+            if (count > 1) {
+                Helper.setErrorMessage(ERROR_OCCURRED, TITLE_USED);
+                return false;
+            } else if (count == 1) {
+                Integer projectId = this.project.getId();
+                if (Objects.nonNull(projectId) && projects.getFirst().getId().equals(projectId)) {
+                    return true;
+                }
+                Helper.setErrorMessage(ERROR_OCCURRED, TITLE_USED);
+                return false;
+            }
+            return true;
+        }
+        Helper.setErrorMessage(ERROR_INCOMPLETE_DATA, "errorProjectNoTitleGiven");
+        return false;
+    }
+
+    private User addFirstUserToNewProject() throws DAOException {
+        if (project.getUsers().isEmpty()) {
+            User currentUser = ServiceManager.getUserService().getCurrentUser();
+            User freshUser = ServiceManager.getUserService().getById(currentUser.getId());
+            freshUser.getProjects().add(project);
+            project.getUsers().add(freshUser);
+            return freshUser;
+        }
+        return null;
+    }
+
+    /**
+     * Remove.
+     */
+    public void delete(int projectId) {
+        try {
+            ProjectService.delete(projectId);
+        } catch (DAOException e) {
+            Helper.setErrorMessage(ERROR_DELETING, new Object[] {ObjectType.PROJECT.getTranslationSingular() }, logger,
+                e);
+        } catch (ProjectDeletionException e) {
+            Helper.setErrorMessage(e.getMessage());
+        }
+    }
+
+    /**
+     * Add folder.
+     *
+     * @return String
+     */
+    public String addFolder() {
+        this.editingFolder = new Folder();
+        this.editingFolder.setProject(this.project);
+        this.generator = new FolderGenerator(editingFolder);
+        return this.stayOnCurrentPage;
+    }
+
+    /**
+     * Save folder.
+     */
+    public void saveFolder() {
+        if (Objects.isNull(editingFolder)) {
+            return;
+        }
+        editingFolder.setFileGroup(
+                StringUtils.trimToEmpty(editingFolder.getFileGroup())
+        );
+        boolean duplicate = workingFolders.stream()
+                .filter(folder -> folder != editingFolder)
+                .map(Folder::getFileGroup)
+                .map(StringUtils::trimToEmpty)
+                .anyMatch(fileGroup ->
+                        Objects.equals(
+                                fileGroup,
+                                StringUtils.trimToEmpty(editingFolder.getFileGroup())
+                        )
+                );
+
+        if (duplicate) {
+            Helper.setErrorMessage(
+                    "errorDuplicateFilegroup",
+                    new Object[] { editingFolder.getFileGroup() }
+            );
+            editingFolder.setFileGroup(originalFileGroup);
+            return;
+        }
+
+        boolean exists = workingFolders.stream()
+                .anyMatch(folder -> folder == editingFolder);
+
+        if (!exists) {
+            workingFolders.add(editingFolder);
+        }
+    }
+
+    /**
+     * Delete folder.
+     *
+     */
+    public void deleteFolder() {
+        // Identity comparison is intentional: remove the exact folder instance being edited.
+        workingFolders.removeIf(folder -> folder == editingFolder);
+    }
+
+    /**
+     * Return list of templates assignable to this project. Templates are
+     * assignable when they are not assigned already to this project and they
+     * belong to the same client as the project and user which edits this
+     * project.
+     *
+     * @return list of assignable templates
+     */
+    public List<Template> getTemplates() {
+        try {
+            return ServiceManager.getTemplateService().findAllAvailableForAssignToProject(this.project);
+        } catch (DAOException e) {
+            Helper.setErrorMessage(ERROR_LOADING_MANY, new Object[] {ObjectType.TEMPLATE.getTranslationPlural() },
+                logger, e);
+            return new LinkedList<>();
+        }
+    }
+
+    /**
+     * Get import configurations.
+     *
+     * @return import configurations
+     */
+    public List<ImportConfiguration> getImportConfigurations() {
+        try {
+            return ServiceManager.getImportConfigurationService().getAll();
+        } catch (DAOException e) {
+            Helper.setErrorMessage(e);
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Add template to project.
+     *
+     * @return stay on the same page
+     */
+    public String addTemplate() {
+        int templateId = 0;
+        String templateIdString = Helper.getRequestParameter(ID_PARAMETER);
+        if (Objects.nonNull(templateIdString)) {
+            try {
+                templateId = Integer.parseInt(templateIdString);
+                Template template = ServiceManager.getTemplateService().getById(templateId);
+                if (!this.project.getTemplates().contains(template)) {
+                    this.project.getTemplates().add(template);
+                    template.getProjects().add(this.project);
+                }
+            } catch (DAOException e) {
+                Helper.setErrorMessage(ERROR_DATABASE_READING,
+                        new Object[] {ObjectType.TEMPLATE.getTranslationSingular(), templateId }, logger, e);
+            } catch (NumberFormatException e) {
+                Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
+            }
+        } else {
+            Helper.setErrorMessage(ERROR_PARAMETER_MISSING, new Object[] {ID_PARAMETER});
+        }
+        return this.stayOnCurrentPage;
+    }
+
+    /**
+     * Remove template from project.
+     *
+     * @return stay on the same page
+     */
+    public String deleteTemplate() {
+        String templateIdString = Helper.getRequestParameter(ID_PARAMETER);
+        if (Objects.nonNull(templateIdString)) {
+            try {
+                int templateId = Integer.parseInt(templateIdString);
+                for (Template template : this.project.getTemplates()) {
+                    if (template.getId().equals(templateId)) {
+                        this.project.getTemplates().remove(template);
+                        template.getProjects().remove(this.project);
+                        this.deletedTemplates.add(template);
+                        break;
+                    }
+                }
+            } catch (NumberFormatException e) {
+                Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
+            }
+        } else {
+            Helper.setErrorMessage(ERROR_PARAMETER_MISSING, new Object[] {ID_PARAMETER});
+        }
+        return this.stayOnCurrentPage;
+    }
+
+    /**
+     * Switch the lock status of the form.
+     */
+    public void switchLock() {
+        locked = !locked;
+    }
+
+    /**
+     * Gets the locked status of the form.
+     *
+     * @return the value of locked
+     */
+    public boolean isLocked() {
+        return locked;
+    }
+
+    /**
+     * Get project.
+     *
+     * @return Project object
+     */
+    public Project getProject() {
+        return this.project;
+    }
+
+    /**
+     * Set my project and check for assigned processes.
+     *
+     * @param project
+     *            Project object
+     */
+    public void setProject(Project project) {
+        // has to be called if a page back move was done
+        cancel();
+        this.project = project;
+        this.editingFolder = null;
+        try {
+            hasProcesses = ServiceManager.getProjectService().hasProcesses(project.getId());
+        } catch (DAOException e) {
+            Helper.setErrorMessage(
+                    ERROR_DATABASE_READING,
+                    new Object[] { ObjectType.PROJECT.getTranslationSingular(), project.getId() },
+                    logger,
+                    e
+            );
+            hasProcesses = false; // fallback to safe default
+        }
+    }
+
+    /**
+     * Set copy templates.
+     *
+     * @param copyTemplates
+     *            as boolean
+     */
+    public void setCopyTemplates(boolean copyTemplates) {
+        this.copyTemplates = copyTemplates;
+    }
+
+    /**
+     * Get copy templates.
+     *
+     * @return value of copy templates
+     */
+    public boolean isCopyTemplates() {
+        return copyTemplates;
+    }
+
+    /**
+     * The need to commit deleted folders only after the save action requires a
+     * filter, so that those folders marked for delete are not shown anymore.
+     *
+     * @return modified ArrayList
+     */
+    public List<Folder> getFolderList() {
+        return workingFolders;
+    }
+
+    /**
+     * The need to commit deleted folders only after the save action requires a
+     * filter, so that those folders marked for delete are not shown anymore.
+     *
+     * @return modified ArrayList
+     */
+    public List<SelectItem> getSelectableFolders() {
+        return getFolderList().stream()
+                .map(folder -> new SelectItem(
+                        toUiFileGroup(folder.getFileGroup()),
+                        folder.toString()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns the selectable folders for the generator source.
+     *
+     * @return selectable folders for the generator source
+     */
+    public List<SelectItem> getSelectableGeneratorSourceFolders() {
+        return getFolderList().stream()
+                .map(folder -> {
+                    SelectItem item = new SelectItem(
+                            toUiFileGroup(folder.getFileGroup()),
+                            folder.toString());
+                    item.setDisabled(folder.isGeneratedImageFolder());
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Returns whether the folder currently being edited is the configured generator source.
+     *
+     * @return whether the edited folder is the configured generator source
+     */
+    public boolean isGeneratorSourceFolder() {
+        return Objects.nonNull(editingFolder)
+            && editingFolder == project.getGeneratorSource();
+    }
+
+    /**
+     * Checks if folder list contains audio folder.
+     *
+     * @return true if folder list contains audio folder
+     */
+    public boolean hasAudioFolder() {
+        return getFolderList().stream().anyMatch(folder -> folder.getMimeType().startsWith(MIMETYPE_PREFIX_AUDIO));
+    }
+
+    /**
+     * Checks if folder list contains video folder.
+     *
+     * @return true if folder list contains video folder
+     */
+    public boolean hasVideoFolder() {
+        return getFolderList().stream().anyMatch(folder -> folder.getMimeType().startsWith(MIMETYPE_PREFIX_VIDEO));
+    }
+
+    private Map<String, Folder> getFolderMap() {
+        return getFolderList().stream()
+                .collect(Collectors.toMap(
+                        folder -> toUiFileGroup(folder.getFileGroup()),
+                        Function.identity(),
+                        (existing, replacement) ->
+                                Objects.nonNull(existing.getId()) ? existing : replacement
+                ));
+    }
+
+    private String toUiFileGroup(String fileGroup) {
+        return StringUtils.isEmpty(fileGroup)
+                ? EMPTY_FILE_GROUP_SENTINEL
+                : fileGroup;
+    }
+
+    /**
+     * Returns an encapsulation to access the generator properties of the folder
+     * in a JSF-friendly way.
+     *
+     * @return the generator controller
+     */
+    public FolderGenerator getGenerator() {
+        return generator;
+    }
+
+    /**
+     * Returns the list of possible MIME types to display them in the drop-down
+     * select.
+     *
+     * @return possible MIME types
+     */
+    public Map<String, String> getMimeTypes() {
+        if (mimeTypes.isEmpty()) {
+            try {
+                Locale language = FacesContext.getCurrentInstance().getViewRoot().getLocale();
+                List<LanguageRange> languages = Collections.singletonList(new LanguageRange(language.toLanguageTag()));
+                mimeTypes = FileFormatsConfig.getFileFormats().parallelStream()
+                        .collect(Collectors.toMap(locale -> locale.getLabel(languages), FileFormat::getMimeType,
+                            (prior, recent) -> recent, TreeMap::new));
+            } catch (JAXBException | RuntimeException e) {
+                Helper.setErrorMessage(ERROR_READING, new Object[] {e.getMessage() }, logger, e);
+            }
+        }
+        return mimeTypes;
+    }
+
+    /**
+     * Returns the folder to use as source for generation of derived resources
+     * of this project.
+     *
+     * @return the source folder for generation
+     */
+    public String getGeneratorSource() {
+        Folder source = project.getGeneratorSource();
+        return Objects.isNull(source)
+                ? null
+                : toUiFileGroup(source.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use as source for generation of derived resources of
+     * this project.
+     *
+     * @param generatorSource
+     *            source folder for generation to set
+     */
+    public void setGeneratorSource(String generatorSource) {
+        project.setGeneratorSource(getFolderMap().get(generatorSource));
+    }
+
+    /**
+     * Returns the folder to use for the media view.
+     *
+     * @return media view folder
+     */
+    public String getMediaView() {
+        Folder mediaView = project.getMediaView();
+        return Objects.isNull(mediaView)
+                ? null
+                : toUiFileGroup(mediaView.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for the media view.
+     *
+     * @param mediaView
+     *         media view folder
+     */
+    public void setMediaView(String mediaView) {
+        project.setMediaView(getFolderMap().get(mediaView));
+    }
+
+    /**
+     * Returns the folder to use for the audio media view.
+     *
+     * @return audio media view folder
+     */
+    public String getAudioMediaView() {
+        Folder audioMediaView = project.getAudioMediaView();
+        return Objects.isNull(audioMediaView)
+                ? null
+                : toUiFileGroup(audioMediaView.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for the media view.
+     *
+     * @param audioMediaView
+     *         audio media view folder
+     */
+    public void setAudioMediaView(String audioMediaView) {
+        project.setAudioMediaView(getFolderMap().get(audioMediaView));
+    }
+
+    /**
+     * Returns the state of the audio media view waveform.
+     *
+     * @return True if enabled
+     */
+    public boolean isAudioMediaViewWaveform() {
+        return project.isAudioMediaViewWaveform();
+    }
+
+    /**
+     * Sets the state of the audio media view waveform.
+     *
+     * @param audioMediaViewWaveform True if enabled
+     *
+     */
+    public void setAudioMediaViewWaveform(boolean audioMediaViewWaveform) {
+        project.setAudioMediaViewWaveform(audioMediaViewWaveform);
+    }
+
+    /**
+     * Returns the folder to use for the video media view.
+     *
+     * @return video media view folder
+     */
+    public String getVideoMediaView() {
+        Folder videoMediaView = project.getVideoMediaView();
+        return Objects.isNull(videoMediaView)
+                ? null
+                : toUiFileGroup(videoMediaView.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for the media view.
+     *
+     * @param videoMediaView
+     *         video media view folder
+     */
+    public void setVideoMediaView(String videoMediaView) {
+        project.setVideoMediaView(getFolderMap().get(videoMediaView));
+    }
+
+    /**
+     * Returns the folder to use for preview.
+     *
+     * @return preview folder
+     */
+    public String getPreview() {
+        Folder preview = project.getPreview();
+        return Objects.isNull(preview)
+                ? null
+                : toUiFileGroup(preview.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for preview.
+     *
+     * @param preview
+     *         preview folder
+     */
+    public void setPreview(String preview) {
+        project.setPreview(getFolderMap().get(preview));
+    }
+
+    /**
+     * Returns the preview hover mode.
+     *
+     * @return The preview hover mode
+     */
+    public PreviewHoverMode getPreviewHoverMode() {
+        return project.getPreviewHoverMode();
+    }
+
+    /**
+     * Sets the preview hover mode.
+     *
+     * @param previewHoverMode preview hover mode
+     */
+    public void setPreviewHoverMode(PreviewHoverMode previewHoverMode) {
+        project.setPreviewHoverMode(previewHoverMode);
+    }
+
+    /**
+     * Returns the folder to use for audio preview.
+     *
+     * @return audio preview folder
+     */
+    public String getAudioPreview() {
+        Folder audioPreview = project.getAudioPreview();
+        return Objects.isNull(audioPreview)
+                ? null
+                : toUiFileGroup(audioPreview.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for audio preview.
+     *
+     * @param audioPreview
+     *         audio preview folder
+     */
+    public void setAudioPreview(String audioPreview) {
+        project.setAudioPreview(getFolderMap().get(audioPreview));
+    }
+
+    /**
+     * Returns the folder to use for video preview.
+     *
+     * @return video preview folder
+     */
+    public String getVideoPreview() {
+        Folder videoPreview = project.getVideoPreview();
+        return Objects.isNull(videoPreview)
+                ? null
+                : toUiFileGroup(videoPreview.getFileGroup());
+    }
+
+    /**
+     * Sets the folder to use for video preview.
+     *
+     * @param videoPreview
+     *         video preview folder
+     */
+    public void setVideoPreview(String videoPreview) {
+        project.setVideoPreview(getFolderMap().get(videoPreview));
+    }
+
+    /**
+     * Method being used as viewAction for project edit form.
+     *
+     * @param id ID of the ruleset to load
+     * @param duplicate whether to duplicate the project
+     */
+    public void loadProject(Integer id, Boolean duplicate) {
+
+        if (Objects.nonNull(FacesContext.getCurrentInstance())) {
+            SecurityAccessController securityAccessController = new SecurityAccessController();
+            try {
+                if (Objects.nonNull(id) && !securityAccessController.hasAuthorityToEditProject(id)) {
+                    ExternalContext context = FacesContext.getCurrentInstance().getExternalContext();
+                    context.redirect(DEFAULT_LINK);
+                }
+            } catch (IOException e) {
+                Helper.setErrorMessage(ERROR_LOADING_ONE, new Object[]{ObjectType.PROJECT.getTranslationSingular(), id},
+                        logger, e);
+            }
+        }
+        if (Objects.nonNull(duplicate) && duplicate) {
+            // load existing project as duplicate
+            loadAsDuplicate(id);
+        } else if (Objects.nonNull(id) && !Objects.equals(id, 0)) {
+            // load existing project
+            try {
+                Optional<Project> projectWithFolderOpt = ServiceManager.getProjectService().getProjectWithFolders(id);
+                projectWithFolderOpt.ifPresent(project -> {
+                    setProject(project);
+                    workingFolders = new ArrayList<>(project.getFolders());
+                    this.locked = true;
+                });
+                setSaveDisabled(true);
+            } catch (DAOException e) {
+                Helper.setErrorMessage(ERROR_LOADING_ONE, new Object[] {ObjectType.PROJECT.getTranslationSingular(), id },
+                    logger, e);
+            }
+        }  else {
+            // create new project
+            this.project = new Project();
+            this.locked = false;
+            this.project.setClient(ServiceManager.getUserService().getSessionClientOfAuthenticatedUser());
+        }
+    }
+
+    /**
+     * Return list of projects.
+     *
+     * @return list of projects
+     */
+    public List<Project> getProjects() {
+        try {
+            return ServiceManager.getProjectService().getAll();
+        } catch (DAOException e) {
+            Helper.setErrorMessage(ERROR_LOADING_MANY, new Object[] {ObjectType.PROJECT.getTranslationPlural() },
+                logger, e);
+            return new LinkedList<>();
+        }
+    }
+
+    /**
+     * Set referring view which will be returned when the user clicks "save" or
+     * "cancel" on the project edit page.
+     *
+     * @param referrer
+     *            the referring view
+     */
+    public void setProjectEditReferrerFromTemplate(String referrer) {
+        if (!referrer.isEmpty()) {
+            if ("projects".equals(referrer)) {
+                this.projectEditReferrer = referrer;
+            } else {
+                this.projectEditReferrer = DEFAULT_LINK;
+            }
+        }
+    }
+
+    /**
+     * Return the full view path to the referring view (including list options if it was the project list).
+     *
+     * @return the full view path of the referring view
+     */
+    public String getProjectEditReferrerViewPath() {
+        if (this.projectEditReferrer.equals("projects")) {
+            return ProjectListView.VIEW_PATH +  "&" + getReferrerListOptions();
+        } else {
+            return DEFAULT_LINK;
+        }
+    }
+
+    /**
+     * Return whether project has processes or not.
+     *
+     * @return whether project has processes or not
+     */
+    public Boolean hasProcesses() {
+        return hasProcesses;
+    }
+
+    /**
+     * Return the list of validation configurations that can be assigned to a folder based
+     * on the folders mimeType.
+     * 
+     * @return the list of possible validation configurations that can be assigned to a folder
+     */
+    public List<LtpValidationConfiguration> getPossibleLtpValidationConfigurations() {
+        if (Objects.isNull(editingFolder)) {
+            return Collections.emptyList();
+        }
+        return ServiceManager.getLtpValidationConfigurationService().listByMimeType(editingFolder.getMimeType());
+    }
+
+}

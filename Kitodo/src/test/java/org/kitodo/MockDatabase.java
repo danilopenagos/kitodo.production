@@ -93,7 +93,7 @@ import org.kitodo.exceptions.WorkflowException;
 import org.kitodo.production.enums.ObjectType;
 import org.kitodo.production.enums.ProcessState;
 import org.kitodo.production.process.ProcessGenerator;
-import org.kitodo.production.security.password.SecurityPasswordEncoder;
+import org.kitodo.production.security.password.KitodoDelegatingPasswordEncoder;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.workflow.WorkflowControllerService;
 import org.kitodo.production.workflow.model.Converter;
@@ -115,7 +115,6 @@ public class MockDatabase {
     private static final String HTTP_TRANSPORT_PORT = "9305";
     private static final String TARGET = "target";
     private static final String CHOICE = "choice";
-    private static final String TEST = "test";
     private static final String FIRST_VALUE = "first value";
     private static final Logger logger = LogManager.getLogger(MockDatabase.class);
     private static Server tcpServer;
@@ -131,6 +130,7 @@ public class MockDatabase {
     public static final String HIERARCHY_CHILD_TO_KEEP = "HierarchyChildToKeep";
     public static final String HIERARCHY_CHILD_TO_REMOVE = "HierarchyChildToRemove";
     public static final String HIERARCHY_CHILD_TO_ADD = "HierarchyChildToAdd";
+    public static final String DEFAULT_USER_PASSWORD = "test";
     public static final int PORT = 8888;
 
     public static void startDatabaseServer() throws SQLException {
@@ -144,12 +144,14 @@ public class MockDatabase {
     }
 
     public static void startNode() throws Exception {
-        final String nodeName = "index";
-        final String port = "9205"; // defined in test resources file hibernate.cfg.xml
-        Environment environment = prepareEnvironment(port, nodeName, Paths.get("target", "classes"));
-        removeOldDataDirectories("target/" + nodeName);
-        node = new ExtendedNode(environment, Collections.singleton(Netty4Plugin.class));
-        node.start();
+        if (node == null) {
+            final String nodeName = "index";
+            final String port = "9205"; // defined in test resources file hibernate.cfg.xml
+            Environment environment = prepareEnvironment(port, nodeName, Paths.get("target", "classes"));
+            removeOldDataDirectories("target/" + nodeName);
+            node = new ExtendedNode(environment, Collections.singleton(Netty4Plugin.class));
+            node.start();
+        }
     }
 
     public static void stopNode() throws Exception {
@@ -400,6 +402,10 @@ public class MockDatabase {
         authorities.add(new Authority("renameMedia" + GLOBAL_ASSIGNABLE));
         authorities.add(new Authority("renameMedia" + CLIENT_ASSIGNABLE));
 
+        // Delete media files
+        authorities.add(new Authority("deleteMedia" + GLOBAL_ASSIGNABLE));
+        authorities.add(new Authority("deleteMedia" + CLIENT_ASSIGNABLE));
+
         // Assign import configurations to clients
         authorities.add(new Authority("assignImportConfigurationToClient" + GLOBAL_ASSIGNABLE));
 
@@ -570,7 +576,6 @@ public class MockDatabase {
 
         Process firstProcess = new Process();
         firstProcess.setTitle("First process");
-        firstProcess.setWikiField("field");
         LocalDate localDate = LocalDate.of(2017, 1, 20);
         firstProcess.setCreationDate(Date.from(localDate.atStartOfDay().atZone(ZoneId.systemDefault()).toInstant()));
         firstProcess.setSortHelperImages(30);
@@ -583,7 +588,6 @@ public class MockDatabase {
 
         Process secondProcess = new Process();
         secondProcess.setTitle("Second process");
-        secondProcess.setWikiField("problem");
         localDate = LocalDate.of(2017, 2, 10);
         secondProcess.setCreationDate(Date.from(localDate.atStartOfDay().atZone(ZoneId.systemDefault()).toInstant()));
         secondProcess.setDocket(ServiceManager.getDocketService().getById(1));
@@ -626,7 +630,7 @@ public class MockDatabase {
         multiVolumeWork.setTitle("Multi volume work test process");
         Project project = ServiceManager.getProjectService().getById(1);
         multiVolumeWork.setProject(project);
-        multiVolumeWork.setTemplate(project.getTemplates().get(0));
+        multiVolumeWork.setTemplate(project.getTemplates().getFirst());
         multiVolumeWork.setRuleset(ServiceManager.getRulesetService().getById(1));
         ServiceManager.getProcessService().save(multiVolumeWork);
         return multiVolumeWork.getId();
@@ -645,7 +649,7 @@ public class MockDatabase {
         templateProcess.setBaseType("Volume");
         templateProcess.setTitle("Test volume");
         templateProcess.setProject(firstProject);
-        templateProcess.setTemplate(firstProject.getTemplates().get(0));
+        templateProcess.setTemplate(firstProject.getTemplates().getFirst());
         templateProcess.setRuleset(ServiceManager.getRulesetService().getById(1));
         templateProcess.setInChoiceListShown(true);
         ServiceManager.getProcessService().save(templateProcess);
@@ -1243,7 +1247,7 @@ public class MockDatabase {
      */
     public static int insertTestProcessIntoSecondProject(String processTitle) throws DAOException {
         Project projectTwo = ServiceManager.getProjectService().getById(2);
-        Template template = projectTwo.getTemplates().get(0);
+        Template template = projectTwo.getTemplates().getFirst();
         Process mediaReferencesProcess = new Process();
         mediaReferencesProcess.setTitle(processTitle);
         mediaReferencesProcess.setProject(projectTwo);
@@ -1417,6 +1421,7 @@ public class MockDatabase {
         eleventhTask.setProcess(secondProcess);
         eleventhTask.setScriptName("scriptName");
         eleventhTask.setScriptPath("../type/automatic/script/path");
+        eleventhTask.setTemplate(firstTemplate);
         eleventhTask.getRoles().add(role);
         role.getTasks().add(eleventhTask);
         firstUser.getProcessingTasks().add(eleventhTask);
@@ -1431,6 +1436,7 @@ public class MockDatabase {
         twelfthTask.setProcessingUser(firstUser);
         twelfthTask.setProcessingStatus(TaskStatus.INWORK);
         twelfthTask.setProcess(secondProcess);
+        twelfthTask.setTemplate(firstTemplate);
         twelfthTask.getRoles().add(role);
         role.getTasks().add(twelfthTask);
         firstUser.getProcessingTasks().add(twelfthTask);
@@ -1445,6 +1451,7 @@ public class MockDatabase {
         thirteenTask.setProcessingBegin(Date.from(localDate.atStartOfDay().atZone(ZoneId.systemDefault()).toInstant()));
         thirteenTask.setProcessingStatus(TaskStatus.OPEN);
         thirteenTask.setProcess(secondProcess);
+        thirteenTask.setTemplate(firstTemplate);
         thirteenTask.getRoles().add(role);
         role.getTasks().add(thirteenTask);
         secondProcess.getTasks().add(thirteenTask);
@@ -1540,7 +1547,7 @@ public class MockDatabase {
     }
 
     private static void insertUsers() throws DAOException {
-        SecurityPasswordEncoder passwordEncoder = new SecurityPasswordEncoder();
+        KitodoDelegatingPasswordEncoder passwordEncoder = new KitodoDelegatingPasswordEncoder();
         Client firstClient = ServiceManager.getClientService().getById(1);
         Client secondClient = ServiceManager.getClientService().getById(2);
 
@@ -1559,7 +1566,7 @@ public class MockDatabase {
         firstUser.setName("Jan");
         firstUser.setSurname("Kowalski");
         firstUser.setLogin("kowal");
-        firstUser.setPassword(passwordEncoder.encrypt(TEST));
+        firstUser.setPassword(passwordEncoder.encode(DEFAULT_USER_PASSWORD));
         firstUser.setLdapLogin("kowalLDP");
         firstUser.setLocation("Dresden");
         firstUser.setTableSize(20);
@@ -1576,7 +1583,7 @@ public class MockDatabase {
         secondUser.setName("Adam");
         secondUser.setSurname("Nowak");
         secondUser.setLogin("nowak");
-        secondUser.setPassword(passwordEncoder.encrypt(TEST));
+        secondUser.setPassword(passwordEncoder.encode(DEFAULT_USER_PASSWORD));
         secondUser.setLdapLogin("nowakLDP");
         secondUser.setLocation("Dresden");
         secondUser.setLanguage("de");
@@ -1605,7 +1612,7 @@ public class MockDatabase {
         fourthUser.setName("Max");
         fourthUser.setSurname("Mustermann");
         fourthUser.setLogin("mmustermann");
-        fourthUser.setPassword(passwordEncoder.encrypt(TEST));
+        fourthUser.setPassword(passwordEncoder.encode(DEFAULT_USER_PASSWORD));
         fourthUser.setLdapLogin("mmustermann");
         fourthUser.setLocation("Dresden");
         fourthUser.setTableSize(20);
@@ -1617,7 +1624,7 @@ public class MockDatabase {
         fifthUser.setName("Last");
         fifthUser.setSurname("User");
         fifthUser.setLogin("user");
-        fifthUser.setPassword(passwordEncoder.encrypt(TEST));
+        fifthUser.setPassword(passwordEncoder.encode(DEFAULT_USER_PASSWORD));
         fifthUser.setLdapLogin("user");
         fifthUser.setLocation("Dresden");
         fifthUser.setTableSize(20);
@@ -1628,7 +1635,7 @@ public class MockDatabase {
         sixthUser.setName("Very last");
         sixthUser.setSurname("User");
         sixthUser.setLogin("verylast");
-        sixthUser.setPassword(passwordEncoder.encrypt(TEST));
+        sixthUser.setPassword(passwordEncoder.encode(DEFAULT_USER_PASSWORD));
         sixthUser.getClients().add(firstClient);
         sixthUser.getRoles().add(metadataRole);
         sixthUser.setMetadataLanguage("de");
@@ -1645,13 +1652,7 @@ public class MockDatabase {
         firstRole.setClient(firstClient);
 
         // insert administration authorities
-        for (int i = 0; i < 34; i++) {
-            firstRole.getAuthorities().add(allAuthorities.get(i));
-        }
-
-        firstRole.getAuthorities().add(ServiceManager.getAuthorityService()
-                .getByTitle("useMassImport" + CLIENT_ASSIGNABLE));
-
+        firstRole.getAuthorities().addAll(allAuthorities);
         ServiceManager.getRoleService().save(firstRole);
 
         Role secondRole = new Role();
@@ -1806,7 +1807,7 @@ public class MockDatabase {
     }
 
     public static void insertWorkflows() throws DAOException {
-        Workflow firstWorkflow = new Workflow(TEST);
+        Workflow firstWorkflow = new Workflow("test");
         firstWorkflow.setStatus(WorkflowStatus.ACTIVE);
         firstWorkflow.setClient(ServiceManager.getClientService().getById(1));
         ServiceManager.getWorkflowService().save(firstWorkflow);
@@ -1868,8 +1869,8 @@ public class MockDatabase {
         ppnField.setImportConfiguration(gbvConfiguration);
 
         gbvConfiguration.setSearchFields(Collections.singletonList(ppnField));
-        gbvConfiguration.setIdSearchField(gbvConfiguration.getSearchFields().get(0));
-        gbvConfiguration.setDefaultSearchField(gbvConfiguration.getSearchFields().get(0));
+        gbvConfiguration.setIdSearchField(gbvConfiguration.getSearchFields().getFirst());
+        gbvConfiguration.setDefaultSearchField(gbvConfiguration.getSearchFields().getFirst());
         gbvConfiguration.setClients(clients);
         ServiceManager.getImportConfigurationService().save(gbvConfiguration);
 
@@ -1988,8 +1989,8 @@ public class MockDatabase {
         idField.setImportConfiguration(customConfiguration);
 
         customConfiguration.setSearchFields(Collections.singletonList(idField));
-        customConfiguration.setIdSearchField(customConfiguration.getSearchFields().get(0));
-        customConfiguration.setDefaultSearchField(customConfiguration.getSearchFields().get(0));
+        customConfiguration.setIdSearchField(customConfiguration.getSearchFields().getFirst());
+        customConfiguration.setDefaultSearchField(customConfiguration.getSearchFields().getFirst());
 
         // add URL parameters
         UrlParameter firstParameter = new UrlParameter();

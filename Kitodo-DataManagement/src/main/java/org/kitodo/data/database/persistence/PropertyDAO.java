@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import javax.persistence.PersistenceException;
+import jakarta.persistence.PersistenceException;
 
 import org.hibernate.Session;
 import org.kitodo.data.database.beans.Property;
@@ -60,8 +60,8 @@ public class PropertyDAO extends BaseDAO<Property> {
      */
     public List<String> retrieveDistinctTitles() {
         try (Session session = HibernateUtil.getSession()) {
-            List<?> titles = session.createQuery("SELECT DISTINCT title FROM Property").list();
-            return titles.stream().map(Object::toString).sorted().collect(Collectors.toList());
+            List<?> titles = session.createQuery("SELECT DISTINCT title FROM Property ORDER BY title ASC").list();
+            return titles.stream().map(Object::toString).collect(Collectors.toList());
         } catch (PersistenceException e) {
             return Collections.emptyList();
         }

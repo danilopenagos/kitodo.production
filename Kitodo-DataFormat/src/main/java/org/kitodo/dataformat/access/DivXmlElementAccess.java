@@ -26,11 +26,11 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
-import javax.xml.bind.JAXBElement;
 import javax.xml.namespace.QName;
+
+import jakarta.xml.bind.JAXBElement;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.kitodo.api.MdSec;
@@ -262,7 +262,7 @@ public class DivXmlElementAccess extends LogicalDivision {
                     .sorted(Comparator.comparing(PhysicalDivision::getOrder)).map(physicalDivisionIDs::get)
                     .filter(Objects::nonNull)
                     .map(physicalDivisionId -> Pair.of(metsReferrerId, physicalDivisionId))
-                    .collect(Collectors.toList()));
+                    .toList());
         }
 
         Optional<MdSecType> optionalDmdSec = createMdSec(super.getMetadata(), MdSec.DMD_SEC);
@@ -316,6 +316,8 @@ public class DivXmlElementAccess extends LogicalDivision {
         xmlData.getAny().add(new JAXBElement<>(KITODO_QNAME, KitodoType.class, kitodoType));
         MdWrap mdWrap = new MdWrap();
         mdWrap.setXmlData(xmlData);
+        mdWrap.setMDTYPE("OTHER");
+        mdWrap.setOTHERMDTYPE("KITODO");
         MdSecType dmdSec = new MdSecType();
         dmdSec.setMdWrap(mdWrap);
         return Optional.of(dmdSec);

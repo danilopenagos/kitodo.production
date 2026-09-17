@@ -9,7 +9,7 @@
  * GPL3-License.txt file that was distributed with this source code.
  */
 
-import WaveSurfer from './../libs/wavesurfer/wavesurfer.esm.js.jsf';
+import WaveSurfer from './../libs/wavesurfer/wavesurfer.esm.js';
 
 class AudioWaveform {
     #audioElement;
@@ -24,7 +24,7 @@ class AudioWaveform {
 
     init() {
         let self = this;
-        this.#audioElement = document.querySelector('audio.mediaPreviewItem');
+        this.#audioElement = document.querySelector('.mediaPreviewItem audio');
         if (this.#audioElement && this.#audioElement.getAttribute("data-audio-waveform") !== "initialized") {
             this.#audioElement.setAttribute("data-audio-waveform", "initialized");
 
@@ -60,7 +60,7 @@ class AudioWaveform {
         waveContainer.onclick = function () {
             self.#wavesurfer.playPause();
         };
-        waveContainer.style.width = "90%";
+        waveContainer.style.width = "100%";
         waveContainer.style.display = "none";
         this.#audioElement.parentNode.insertBefore(waveContainer, this.#audioElement);
 

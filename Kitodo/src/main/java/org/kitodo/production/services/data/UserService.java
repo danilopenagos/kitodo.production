@@ -42,29 +42,31 @@ import org.kitodo.config.enums.ParameterCore;
 import org.kitodo.data.database.beans.Client;
 import org.kitodo.data.database.beans.Filter;
 import org.kitodo.data.database.beans.Project;
-import org.kitodo.data.database.beans.Task;
 import org.kitodo.data.database.beans.User;
 import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.data.database.persistence.UserDAO;
 import org.kitodo.exceptions.FilterException;
 import org.kitodo.production.helper.Helper;
+import org.kitodo.production.helper.cache.RequestScopeCacheHelper;
 import org.kitodo.production.security.SecurityUserDetails;
-import org.kitodo.production.security.password.SecurityPasswordEncoder;
+import org.kitodo.production.security.password.KitodoDelegatingPasswordEncoder;
 import org.kitodo.production.services.ServiceManager;
 import org.primefaces.model.SortOrder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
 public class UserService extends BaseBeanService<User, UserDAO> implements UserDetailsService {
 
     private static final Logger logger = LogManager.getLogger(UserService.class);
     private static volatile UserService instance = null;
     private static final String CLIENT_ID = "clientId";
-    private final SecurityPasswordEncoder passwordEncoder = new SecurityPasswordEncoder();
+    private final KitodoDelegatingPasswordEncoder passwordEncoder = new KitodoDelegatingPasswordEncoder();
     private static final int DEFAULT_CLIENT_ID =
             ConfigCore.getIntParameterOrDefaultValue(ParameterCore.DEFAULT_CLIENT_ID);
+    private static final String CURRENT_USER_CACHE_KEY = "current_user";
 
     /**
      * Constructor.
@@ -138,6 +140,7 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
     @Override
     public List<User> loadData(int first, int pageSize, String sortField, SortOrder sortOrder, Map filters) {
         HashMap<String, Object> filterMap;
+
         try {
             filterMap = ServiceManager.getFilterService().getSQLFilterMap(filters, User.class);
         } catch (NoSuchFieldException | NumberFormatException e) {
@@ -192,7 +195,7 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
 
     private User uniqueResult(List<User> users, String login) {
         if (users.size() == 1) {
-            return users.get(0);
+            return users.getFirst();
         } else if (users.isEmpty()) {
             throw new UsernameNotFoundException("Login '" + login + "' not found!");
         } else {
@@ -203,7 +206,10 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
     }
 
     /**
-     * Gets the current authenticated user of current threads security context.
+     * Gets the currently authenticated user from the current thread's security context.
+     * 
+     * <p>This user object is not updated throughout the user session. It contains the user object retrieved from the database at the time 
+     * of login. Do not use this object to query or modify user information or associated beans.</p>
      *
      * @return The SecurityUserDetails object or null if no user is authenticated.
      */
@@ -212,17 +218,38 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
     }
 
     /**
-     * Get the current authenticated user as User bean.
+     * Return the current User object after loading it from the database (cached for each request).
+     * 
+     * <p>Previously, the user object was loaded from the Spring Security context. This meant that the user 
+     * object and associated beans (e.g. assigned clients, assigned projects) were cached for the full duration
+     * of the user session. If user details were changed by other users (e.g. administrators) while a user is 
+     * logged in, these would not be reflected immediately for this user, because the user object was never
+     * updated from the database during the user session.</p>
+     * 
+     * <p>Instead, the user object is now loaded exactly once from the database for each request. Any updates to
+     * user details or associated beans (e.g. assigned clients, assigned projects) are immediately reflected in 
+     * views even while the user is logged in.</p>
      *
      * @return the User object
      */
     public User getCurrentUser() {
-        SecurityUserDetails authenticatedUser = getAuthenticatedUser();
-        if (Objects.nonNull(authenticatedUser)) {
-            return new User(authenticatedUser);
-        } else {
+        User user = RequestScopeCacheHelper.getFromCache(CURRENT_USER_CACHE_KEY, () -> {
+            try {
+                SecurityUserDetails authenticatedUser = getAuthenticatedUser();
+                if (Objects.nonNull(authenticatedUser)) {
+                    return ServiceManager.getUserService().getById(authenticatedUser.getId());
+                }
+                logger.debug("spring security context has no authenticated user");
+                return null;
+            } catch (DAOException e) {
+                logger.error("cannot retrieve authenticated user from database", e);
+                return null;
+            }
+        }, User.class);
+        if (Objects.isNull(user)) {
             throw new NoSuchElementException("There is currently no authenticated user for this thread");
         }
+        return user;
     }
 
     /**
@@ -293,13 +320,13 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
     }
 
     private boolean isLoginAllowed(String login) {
-        KitodoConfigFile blacklist = KitodoConfigFile.LOGIN_BLACKLIST;
-        // If user defined blacklist doesn't exists, use default one
-        try (InputStream inputStream = blacklist.exists() ? Files.newInputStream(blacklist.getFile().toPath())
-                : Thread.currentThread().getContextClassLoader().getResourceAsStream(blacklist.getName());
+        KitodoConfigFile denylist = KitodoConfigFile.LOGIN_DENYLIST;
+        // If user defined denylist doesn't exists, use default one
+        try (InputStream inputStream = denylist.exists() ? Files.newInputStream(denylist.getFile().toPath())
+                : Thread.currentThread().getContextClassLoader().getResourceAsStream(denylist.getName());
                 InputStreamReader inputStreamReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
                 BufferedReader reader = new BufferedReader(inputStreamReader)) {
-            if (isLoginFoundOnBlackList(reader, login)) {
+            if (isLoginOnDenyList(reader, login)) {
                 return false;
             }
         } catch (IOException e) {
@@ -310,10 +337,10 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
     }
 
     /**
-     * Go through the user defined blacklist file line by line and compare with
+     * Go through the user defined denylist file line by line and compare with
      * login.
      */
-    private boolean isLoginFoundOnBlackList(BufferedReader reader, String login) throws IOException {
+    private boolean isLoginOnDenyList(BufferedReader reader, String login) throws IOException {
         String notAllowedLogin;
         while ((notAllowedLogin = reader.readLine()) != null) {
             if (notAllowedLogin.length() > 0 && login.equalsIgnoreCase(notAllowedLogin)) {
@@ -459,18 +486,11 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
         }
     }
 
-    /**
-     * Retrieve and return the list of tasks that are assigned to the user and
-     * that are "INWORK" and belong to process, not template.
-     *
-     * @return list of tasks that are currently assigned to the user and that
-     *         are "INWORK" and belong to process, not template
+    /** 
+     * Return the spring seucrity password encoder implementation used to encrypt user passwords.
      */
-    public List<Task> getTasksInProgress(User user) {
-        return user.getProcessingTasks().stream()
-                .filter(
-                    task -> task.getProcessingStatus().equals(TaskStatus.INWORK) && Objects.nonNull(task.getProcess()))
-                .collect(Collectors.toList());
+    public PasswordEncoder getPasswordEncoder() {
+        return this.passwordEncoder;
     }
 
     /**
@@ -488,7 +508,7 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
         } else {
             userWithNewPassword = user;
         }
-        userWithNewPassword.setPassword(passwordEncoder.encrypt(newPassword));
+        userWithNewPassword.setPassword(passwordEncoder.encode(newPassword));
         save(userWithNewPassword);
     }
 
@@ -510,6 +530,10 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
      */
     public String getShortcuts(int userId) throws DAOException {
         return getById(userId).getShortcuts();
+    }
+
+    public String getDefaultPaginationType(int userId) throws DAOException {
+        return getById(userId).getDefaultPaginationType();
     }
 
     /**
@@ -559,5 +583,116 @@ public class UserService extends BaseBeanService<User, UserDAO> implements UserD
         return getClientsOfUser(user).stream()
                 .sorted(Comparator.comparing(Client::getName, String.CASE_INSENSITIVE_ORDER))
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Loads all role titles for the given user IDs in a single query.
+     *
+     * @param userIds list of user IDs
+     * @return a map of userId and list of role titles
+     */
+    public Map<Integer, List<String>> loadRolesForUsers(List<Integer> userIds) {
+        if (userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String hql = "SELECT u.id, r.title "
+                + "FROM User u "
+                + "JOIN u.roles r "
+                + "WHERE u.id IN (:ids)";
+        Map<String, Object> params = new HashMap<>();
+        params.put("ids", userIds);
+        return executeUserStringMappingQuery(hql, params);
+    }
+
+    /**
+     * Loads all client names for the given user IDs in a single query.
+     *
+     * @param userIds list of user IDs
+     * @return a map of userId and list of client names
+     */
+    public Map<Integer, List<String>> loadClientsForUsers(List<Integer> userIds) {
+        if (userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String hql = "SELECT u.id, c.name "
+                + "FROM User u "
+                + "JOIN u.clients c "
+                + "WHERE u.id IN (:ids)";
+        Map<String, Object> params = new HashMap<>();
+        params.put("ids", userIds);
+        return executeUserStringMappingQuery(hql, params);
+    }
+
+    /**
+     * Loads all project titles for the given user IDs in a single query.
+     *
+     * @param userIds list of user IDs
+     * @return a map of userId and list of project titles
+     */
+    public Map<Integer, List<String>> loadProjectsForUsers(List<Integer> userIds) {
+        if (userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        String hql = "SELECT u.id, p.title "
+                + "FROM User u "
+                + "JOIN u.projects p "
+                + "WHERE u.id IN (:ids)";
+        Map<String, Object> params = new HashMap<>();
+        params.put("ids", userIds);
+        return executeUserStringMappingQuery(hql, params);
+    }
+
+    /**
+     * Executes an HQL query that returns a map of userId -> list of string values.
+     *
+     * @param hql    the HQL query to execute
+     * @param params query parameters
+     * @return a map of userId to list of string values
+     */
+    private Map<Integer, List<String>> executeUserStringMappingQuery(String hql, Map<String, Object> params) {
+        List<Object[]> rows = dao.getProjectionByQuery(hql, params);
+        Map<Integer, List<String>> result = new HashMap<>();
+        for (Object[] row : rows) {
+            Integer userId = (Integer) row[0];
+            String value = (String) row[1];
+            result.computeIfAbsent(userId, k -> new ArrayList<>()).add(value);
+        }
+        return result;
+    }
+
+    /**
+     * Loads a boolean flag for each user ID indicating whether the user
+     * has at least one task currently in progress.
+     *
+     * @param userIds list of user IDs
+     * @return map of userId → true/false
+     */
+    public Map<Integer, Boolean> loadTasksInProgressForUsers(List<Integer> userIds) {
+        if (userIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        // We only need the user IDs; returning a constant boolean simplifies post-processing.
+        String hql = "SELECT DISTINCT u.id, true "
+                + "FROM Task t "
+                + "JOIN t.processingUser u "
+                + "WHERE u.id IN (:ids) "
+                + "AND t.processingStatus = :status "
+                + "AND t.process IS NOT NULL";
+
+        Map<String, Object> params = new HashMap<>();
+        params.put("ids", userIds);
+        params.put("status", TaskStatus.INWORK);
+
+        List<Object[]> rows = dao.getProjectionByQuery(hql, params);
+
+        Map<Integer, Boolean> result = new HashMap<>();
+        for (Integer userId : userIds) {
+            result.put(userId, false);
+        }
+        for (Object[] row : rows) {
+            result.put((Integer) row[0], true);
+        }
+        return result;
     }
 }

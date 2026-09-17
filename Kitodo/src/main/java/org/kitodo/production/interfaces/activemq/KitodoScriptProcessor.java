@@ -16,19 +16,21 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import javax.jms.JMSException;
+import jakarta.jms.JMSException;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.kitodo.config.ConfigCore;
 import org.kitodo.config.enums.ParameterCore;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.exceptions.DAOException;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.InvalidImagesException;
 import org.kitodo.exceptions.MediaNotFoundException;
 import org.kitodo.exceptions.ProcessorException;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.command.KitodoScriptService;
 import org.kitodo.production.services.data.ProcessService;
+import org.xml.sax.SAXException;
 
 /**
  * Executes instructions to start a Kitodo Script command from the Active MQ
@@ -62,7 +64,8 @@ public class KitodoScriptProcessor extends ActiveMQProcessor {
                 processes.add(processService.getById(id));
             }
             kitodoScriptService.execute(processes, script);
-        } catch (DAOException | IOException | InvalidImagesException | MediaNotFoundException e) {
+        } catch (DAOException | IOException | InvalidImagesException | MediaNotFoundException | SAXException
+                 | FileStructureValidationException | NumberFormatException e) {
             throw new ProcessorException(e);
         }
     }

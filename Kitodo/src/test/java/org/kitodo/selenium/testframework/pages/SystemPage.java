@@ -28,57 +28,57 @@ import org.openqa.selenium.support.FindBy;
 
 public class SystemPage extends Page<SystemPage> {
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView")
     private WebElement systemTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:indexing_form:indexingTable")
     private WebElement indexingTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:migrationForm:aggregatedTasksTable")
     private WebElement aggregatedTasksTable;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:indexing_form:createMappingButton")
     private WebElement createMappingButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:indexing_form:deleteIndexButton")
     private WebElement deleteIndexButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:indexing_form:startIndexingAllButton")
     private WebElement startIndexingAllButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:migrationForm:migrateWorkflows")
     private WebElement startWorkflowMigrationButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "systemTabView:migrationForm:migrateProject")
     private WebElement migrateSelectedProjectsButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "confirmWorkflowForm:createNewWorkflow")
     private WebElement createNewWorkflowButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "createTemplatesTable:0:createNewTemplateForm:createNewTemplate")
     private WebElement createNewTemplateButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "createTemplatesTable:0:createNewTemplateForm:templateTitle")
     private WebElement templateTitleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "closeForm:close")
     private WebElement closePopupButton;
 
 
     public SystemPage() {
-        super("pages/system.jsf");
+        super("pages/system");
     }
 
     /**
@@ -164,7 +164,7 @@ public class SystemPage extends Page<SystemPage> {
     }
 
     public WorkflowEditPage createNewWorkflow()
-            throws IllegalAccessException, InstantiationException {
+            throws ReflectiveOperationException {
         WebElement element = Browser.getDriver()
                 .findElement(By.xpath(
                     "//*[@id=\"systemTabView:migrationForm:aggregatedTasksTable:1:createWorkflowActionButton\"]"));

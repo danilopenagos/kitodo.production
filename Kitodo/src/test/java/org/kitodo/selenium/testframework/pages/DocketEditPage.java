@@ -22,20 +22,20 @@ public class DocketEditPage extends EditPage<DocketEditPage> {
 
     private static final String DOCKET_TAB_VIEW = EDIT_FORM + ":docketTabView";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = DOCKET_TAB_VIEW + ":title")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(className = "ui-selectonemenu-trigger")
     private WebElement selectTrigger;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(className = "ui-messages-error-summary")
     private WebElement errorMessage;
 
     public DocketEditPage() {
-        super("pages/docketEdit.jsf");
+        super("pages/docketEdit");
     }
 
     @Override
@@ -50,7 +50,7 @@ public class DocketEditPage extends EditPage<DocketEditPage> {
         return this;
     }
 
-    public ProjectsPage save() throws IllegalAccessException, InstantiationException {
+    public ProjectsPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getProjectsPage().getUrl());
         return Pages.getProjectsPage();
     }

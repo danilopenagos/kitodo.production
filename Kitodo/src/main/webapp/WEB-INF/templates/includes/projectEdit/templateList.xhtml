@@ -17,7 +17,9 @@
         xmlns:p="http://primefaces.org/ui"
         xmlns:ui="http://xmlns.jcp.org/jsf/facelets">
 
-    <p:dataTable id="templateTable" var="template" value="#{ProjectForm.project.activeTemplates}" sortBy="#{template.title}">
+    <p:dataTable id="templateTable"
+                 var="template"
+                 value="#{ProjectEditView.project.activeTemplates}">
         <p:column headerText="#{msgs.template}" id="taskTitle">
             <h:outputText value="#{template.title}"/>
         </p:column>
@@ -36,13 +38,13 @@
 
         <p:column styleClass="actionsColumn" headerText="#{msgs.actions}">
             <p:commandLink id="deleteTemplate"
-                           disabled="#{ProjectForm.locked}"
-                           action="#{ProjectForm.deleteTemplate}"
+                           disabled="#{ProjectEditView.locked}"
+                           action="#{ProjectEditView.deleteTemplate}"
                            styleClass="action"
                            title="#{msgs.deleteTemplate}"
                            immediate="true"
                            oncomplete="toggleSave()"
-                           update="@form">
+                           update="@form :templateForm:selectTemplateTable">
                 <i class="fa fa-trash-o fa-lg"/>
                 <f:param name="ID" value="#{template.id}"/>
             </p:commandLink>
@@ -51,7 +53,7 @@
 
     <p:commandButton onclick="PF('addTemplateDialog').show()"
                      id="addTemplateButton"
-                     disabled="#{ProjectForm.locked}"
+                     disabled="#{ProjectEditView.locked}"
                      value="#{msgs.addTemplate}"
                      icon="fa fa-plus-circle fa-lg"
                      iconPos="right"

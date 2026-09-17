@@ -42,7 +42,7 @@
                             <h:panelGroup rendered="#{SecurityAccessController.hasAuthorityToViewProcessPage()}">
                                 <li class="nav-pic-text">
                                     <h:form id="linkProcessesNavigationForm">
-                                        <h:commandLink id="linkProcesses" action="#{ProcessForm.navigateToProcessesList(true)}">
+                                        <h:commandLink id="linkProcesses" action="#{ProcessListView.getViewPath()}">
                                             <i class="fa fa-clipboard fa-lg"/>
                                             <h:outputText value="#{msgs.processes}" />
                                         </h:commandLink>
@@ -52,7 +52,7 @@
 
                             <h:panelGroup rendered="#{SecurityAccessController.hasAuthorityToViewProjectPage()}">
                                 <li class="nav-pic-text">
-                                    <h:link value="#{msgs.projects}" id="linkProjects" outcome="projects?tabIndex=0">
+                                    <h:link value="#{msgs.projects}" id="linkProjects" outcome="projects?tab=projectTab">
                                         <i class="fa fa-archive fa-lg"/>
                                     </h:link>
                                 </li>
@@ -60,7 +60,7 @@
 
                             <h:panelGroup rendered="#{SecurityAccessController.hasAuthorityToViewUserPage()}">
                                 <li class="nav-pic-text">
-                                    <h:link value="#{msgs.users}" id="linkUsers" outcome="users?tabIndex=0">
+                                    <h:link value="#{msgs.users}" id="linkUsers" outcome="users?tab=usersTab">
                                         <i class="fa fa-user fa-lg"/>
                                     </h:link>
                                 </li>
@@ -105,11 +105,11 @@
                                 </li>
                                 <div id="languageList" style="display: none;">
                                     <p:outputPanel deferred="true" deferredMode="visible">
-                                        <p:repeat value="#{LanguageForm.supportedLocales}" var="language">
+                                        <ui:repeat value="#{LanguageForm.supportedLocales}" var="language">
                                             <li class="toggle-list">
                                                 <p:commandLink value="#{language.displayLanguageSelf}" action="#{LanguageForm.setLanguage(language['id'])}"/>
                                             </li>
-                                        </p:repeat>
+                                        </ui:repeat>
                                     </p:outputPanel>
                                 </div>
 
@@ -125,11 +125,11 @@
                                 </li>
                                 <div id="clientList" style="display: none">
                                     <p:outputPanel deferred="true" deferredMode="visible">
-                                        <p:repeat value="#{SessionClientController.availableClientsOfCurrentUserSortedByName}" var="client">
+                                        <ui:repeat value="#{SessionClientController.availableClientsOfCurrentUserSortedByName}" var="client">
                                             <li class="toggle-list">
                                                 <p:commandLink value="#{client.name}" action="#{SessionClientController.setSessionClient(client)}" update="@all"/>
                                             </li>
-                                        </p:repeat>
+                                        </ui:repeat>
                                     </p:outputPanel>
                                 </div>
                                 <li>
@@ -139,9 +139,9 @@
                                     </h:link>
                                 </li>
                                 <li class="logout">
-                                    <h:outputLink value="#{request.contextPath}/logout" id="logout">
+                                    <p:commandLink id="logout" ajax="false" onclick="$('#logout-form')[0].action='#{request.contextPath}/logout';">
                                         #{msgs.logout}<i class="fa fa-power-off"/>
-                                    </h:outputLink>
+                                    </p:commandLink>
                                 </li>
                             </ul>
                         </h:form>

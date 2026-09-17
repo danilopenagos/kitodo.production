@@ -19,8 +19,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.Objects;
 
-import javax.faces.context.FacesContext;
-import javax.faces.event.PhaseId;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.event.PhaseId;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -263,7 +263,7 @@ public class GalleryMediaContent {
         try {
             InputStream viewData = ServiceManager.getFileService().read(uri);
             return DefaultStreamedContent.builder().stream(() -> viewData).contentType(mimeType)
-                    .name(Paths.get(uri.getPath()).getFileName().toString()).contentLength(viewData.available())
+                    .name(Paths.get(uri.getPath()).getFileName().toString()).contentLength((long) viewData.available())
                     .build();
         } catch (IOException e) {
             logger.catching(e);

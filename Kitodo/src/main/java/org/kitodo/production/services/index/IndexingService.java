@@ -18,12 +18,14 @@ import java.util.concurrent.CompletionStage;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.hibernate.Session;
 import org.hibernate.exception.DataException;
 import org.hibernate.search.engine.search.projection.SearchProjection;
 import org.hibernate.search.mapper.orm.Search;
 import org.hibernate.search.mapper.orm.massindexing.MassIndexer;
 import org.hibernate.search.mapper.orm.session.SearchSession;
 import org.hibernate.search.mapper.pojo.massindexing.MassIndexingMonitor;
+import org.hibernate.search.util.common.SearchException;
 import org.kitodo.data.database.beans.BaseBean;
 import org.kitodo.data.database.beans.Process;
 import org.kitodo.data.database.exceptions.DAOException;
@@ -31,6 +33,7 @@ import org.kitodo.data.database.persistence.HibernateUtil;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.services.ServiceManager;
 import org.kitodo.production.services.data.BeanQuery;
+import org.kitodo.production.services.data.IndexQueryTerm;
 
 public class IndexingService {
 
@@ -113,35 +116,80 @@ public class IndexingService {
      *         ends (including to exceptions)
      */
     public CompletionStage<?> startIndexing(Class<? extends BaseBean> type, MassIndexingMonitor monitor) {
-        MassIndexer massIndexer = Search.session(HibernateUtil.getSession()).massIndexer(type);
-        massIndexer.dropAndCreateSchemaOnStart(true);
-        if (Objects.nonNull(monitor)) {
-            massIndexer.monitor(monitor);
+        try (Session ormSession = HibernateUtil.getSession()) {
+            MassIndexer massIndexer = Search.session(ormSession).massIndexer(type);
+            massIndexer.dropAndCreateSchemaOnStart(true);
+            if (Objects.nonNull(monitor)) {
+                massIndexer.monitor(monitor);
+            }
+            String driverName = ormSession
+                    .doReturningWork(c -> c.getMetaData().getDriverName());
+            String normalizedDriverName = Objects.isNull(driverName) ? "" : driverName.toLowerCase();
+            if (normalizedDriverName.contains("mysql") && !normalizedDriverName.contains("mariadb")) {
+                // MySQL needs a special setting for the fetch size
+                // See https://docs.hibernate.org/search/7.0/reference/en-US/html_single/#indexing-massindexer-basics
+                massIndexer.idFetchSize(Integer.MIN_VALUE);
+            } else {
+                // Other Databases
+                massIndexer.idFetchSize(500);
+            }
+            return massIndexer.batchSizeToLoadObjects(1000).start();
         }
-        massIndexer.idFetchSize(Integer.MIN_VALUE).batchSizeToLoadObjects(1000);
-        return massIndexer.start();
     }
 
     /**
-     * Searches for a search term in a search field and returns the hit IDs.
-     * 
+     * Searches for entities matching the given index query terms and returns their IDs.
+     *
+     * <p>The terms are combined into a single boolean Elasticsearch query.
+     * Positive terms are added as filter predicates, negated terms as exclusion
+     * predicates.</p>
+     *
      * @param beanClass
      *            class of beans to search for
-     * @param searchField
-     *            search field to search on
-     * @param value
-     *            value to be found in the search field
+     * @param terms
+     *            index query terms to combine in the search query
      * @return ids of the found beans
      */
-    public Collection<Integer> searchIds(Class<? extends BaseBean> beanClass, String searchField, String value) {
-        SearchSession searchSession = Search.session(HibernateUtil.getSession());
-        SearchProjection<Integer> idField = searchSession.scope(beanClass).projection().field("id", Integer.class)
-                .toProjection();
-        List<Integer> ids = searchSession.search(beanClass).select(idField).where(function -> function.match().field(
-            searchField).matching(value)).fetchAll().hits();
-        logger.debug("Searching {} IDs in field \"{}\" for \"{}\": {} hits", beanClass.getSimpleName(), searchField,
-            value, ids.size());
-        return ids;
+    public Collection<Integer> searchIds(
+            Class<? extends BaseBean> beanClass,
+            List<IndexQueryTerm> terms) {
+        try (Session ormSession = HibernateUtil.getSession()) {
+            SearchSession searchSession = Search.session(ormSession);
+            SearchProjection<Integer> idField = searchSession.scope(beanClass).projection().field("id", Integer.class)
+                    .toProjection();
+            var query = searchSession.search(beanClass)
+                    .select(idField)
+                    .where(searchPredicateFactory -> {
+                        var booleanPredicate = searchPredicateFactory.bool();
+                        for (IndexQueryTerm term : terms) {
+
+                            var predicate = searchPredicateFactory.match()
+                                    .field(term.field())
+                                    .matching(term.token());
+
+                            if (term.operand()) {
+                                booleanPredicate.filter(predicate);
+                            } else {
+                                booleanPredicate.mustNot(predicate);
+                            }
+                        }
+                        return booleanPredicate;
+                    });
+            List<Integer> ids = query.fetchAll().hits();
+
+            String termSummary = String.join(", ",
+                    terms.stream()
+                            .distinct()
+                            .map(t -> t.field() + "=\"" + t.token() + "\"")
+                            .toList());
+            logger.debug(
+                    "Searching {} IDs with terms {}: {} hits",
+                    beanClass.getSimpleName(),
+                    termSummary,
+                    ids.size()
+            );
+            return ids;
+        }
     }
 
     /**
@@ -153,7 +201,11 @@ public class IndexingService {
         BeanQuery beanQuery = new BeanQuery(Process.class);
         Long totalCount = ServiceManager.getProcessService().count(beanQuery.formCountQuery(), beanQuery
                 .getQueryParameters());
-        return totalCount != getAllIndexed();
+        long indexedCount = getAllIndexed();
+        if (totalCount != indexedCount) {
+            logger.warn("Index is considered corrupted with {} of {} processes indexed", indexedCount, totalCount);
+        }
+        return totalCount != indexedCount;
     }
 
     /**
@@ -163,8 +215,15 @@ public class IndexingService {
      * @return long number of all currently indexed objects
      */
     public long getAllIndexed() {
-        SearchSession searchSession = Search.session(HibernateUtil.getSession());
-        long allIndexed = searchSession.search(Process.class).where(f -> f.matchAll()).fetchTotalHitCount();
-        return allIndexed;
+        try (Session ormSession = HibernateUtil.getSession()) {
+            SearchSession searchSession = Search.session(ormSession);
+            return searchSession.search(Process.class)
+                    .where(f -> f.matchAll())
+                    .fetchTotalHitCount();
+        } catch (SearchException e) {
+            logger.debug("Search index temporarily unavailable during indexing initialization/rebuild.", e);
+            // Index temporarily not available, just return 0
+            return 0;
+        }
     }
 }

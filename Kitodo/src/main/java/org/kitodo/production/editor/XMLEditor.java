@@ -22,12 +22,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import javax.annotation.PostConstruct;
-import javax.faces.application.FacesMessage;
-import javax.faces.component.UIComponent;
-import javax.faces.context.FacesContext;
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -38,6 +32,13 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+
+import jakarta.annotation.PostConstruct;
+import jakarta.faces.application.FacesMessage;
+import jakarta.faces.component.UIComponent;
+import jakarta.faces.context.FacesContext;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -148,7 +149,7 @@ public class XMLEditor implements Serializable {
         } catch (TransformerConfigurationException e) {
             logger.error("ERROR: transformer configuration exception: {}", e.getMessage());
         } catch (FileNotFoundException e) {
-            logger.error("ERROR: file not found: " + e.getMessage());
+            logger.error("ERROR: file not found: {}", e.getMessage());
         } catch (IOException e) {
             logger.error("ERROR: could not save XML configuration: {}", e.getMessage());
         } catch (SAXException e) {

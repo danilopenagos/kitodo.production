@@ -23,12 +23,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import javax.el.ValueExpression;
-import javax.faces.context.ExternalContext;
-import javax.faces.context.FacesContext;
-import javax.servlet.ServletOutputStream;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.el.ValueExpression;
+import jakarta.faces.context.ExternalContext;
+import jakarta.faces.context.FacesContext;
+import jakarta.servlet.ServletOutputStream;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -99,7 +99,7 @@ public class RangeStreamContentHandler extends BaseDynamicContentHandler {
                 }
             } finally {
                 if (Objects.nonNull(streamedContent) && Objects.nonNull(streamedContent.getStream())) {
-                    streamedContent.getStream().close();
+                    streamedContent.getStream().get().close();
                 }
             }
         }
@@ -145,13 +145,13 @@ public class RangeStreamContentHandler extends BaseDynamicContentHandler {
 
     private void processInputStreamToOutputStream(HttpServletRequest request, HttpServletResponse response,
             StreamedContent streamedContent, OutputStream outputStream) throws IOException {
-        InputStream inputStream = streamedContent.getStream();
+        InputStream inputStream = streamedContent.getStream().get();
         // Prepare some variables. The full Range represents the complete file.
         int length = inputStream.available(); // Length of file
         Range full = new Range(0, length - 1, length);
         List<Range> ranges = getRanges(request, response, length, streamedContent.getName());
 
-        if (ranges.isEmpty() || Objects.equals(ranges.get(0), full)) {
+        if (ranges.isEmpty() || Objects.equals(ranges.getFirst(), full)) {
             // Return full file.
             logger.info("Return full file");
             response.setContentType(streamedContent.getContentType());
@@ -161,8 +161,8 @@ public class RangeStreamContentHandler extends BaseDynamicContentHandler {
             copy(inputStream, outputStream, length, full.getStart(), full.getLength());
         } else if (ranges.size() == 1) {
             // Return single part of file.
-            Range r = ranges.get(0);
-            logger.info("Returning part of file : from (" + r.getStart() + ") to (" + r.getEnd() + ")");
+            Range r = ranges.getFirst();
+            logger.info("Returning part of file : from ({}) to ({})", r.getStart(), r.getEnd());
             response.setContentType(streamedContent.getContentType());
             response.setHeader("Content-Range", "bytes " + r.getStart() + "-" + r.getEnd() + "/" + r.getTotal());
             response.setHeader("Content-Length", String.valueOf(r.getLength()));
@@ -177,7 +177,7 @@ public class RangeStreamContentHandler extends BaseDynamicContentHandler {
             ServletOutputStream servletOutputStream = (ServletOutputStream) outputStream;
             // Copy multi part range.
             for (Range r : ranges) {
-                logger.info("Return multi part of file : from (" + r.getStart() + ") to (" + r.getEnd() + ")");
+                logger.info("Return multi part of file : from ({}) to ({})", r.getStart(), r.getEnd());
                 // Add multipart boundary and header fields for every range.
                 servletOutputStream.println();
                 servletOutputStream.println("--" + MULTIPART_BOUNDARY);

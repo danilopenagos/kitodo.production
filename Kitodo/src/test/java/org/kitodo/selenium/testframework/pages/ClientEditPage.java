@@ -20,12 +20,12 @@ public class ClientEditPage extends EditPage<ClientEditPage> {
 
     private static final String CLIENTS_TAB_VIEW = EDIT_FORM + ":clientsTabView";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = CLIENTS_TAB_VIEW + ":nameInput")
     private WebElement nameInput;
 
     public ClientEditPage() {
-        super("pages/clientEdit.jsf");
+        super("pages/clientEdit");
     }
 
     @Override
@@ -38,7 +38,7 @@ public class ClientEditPage extends EditPage<ClientEditPage> {
         return this;
     }
 
-    public UsersPage save() throws IllegalAccessException, InstantiationException {
+    public UsersPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getUsersPage().getUrl());
         return Pages.getUsersPage();
     }

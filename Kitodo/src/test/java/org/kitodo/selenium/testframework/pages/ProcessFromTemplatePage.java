@@ -32,75 +32,75 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
     private static final String HIERARCHY_PANEL = "editForm:processFromTemplateTabView:processHierarchyContent";
     private static final String IMPORT_CHILD_PROCESSES_SWITCH = "#catalogSearchForm\\:importChildren .ui-chkbox-box";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW)
     private WebElement processFromTemplateTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":processTitle")
     private WebElement processTitleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":guessImages")
     private WebElement guessImagesInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":logicalStructure")
     private WebElement logicalStructureTree;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":docType")
     private WebElement docTypeSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":metadataTable:0:inputText")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":metadataTable:1:inputText")
     private WebElement titleSortInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":metadataTable:2:inputText")
     private WebElement ppnAnalogInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":metadataTable:3:inputText")
     private WebElement ppnDigitalInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = OPAC_SEARCH_FORM + ":catalogueSelectMenu")
     private WebElement catalogSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":chooseParent")
     private WebElement chooseParentSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = OPAC_SEARCH_FORM + ":fieldSelectMenu")
     private WebElement fieldSelect;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":searchForParent")
     private WebElement searchForParentInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":searchParent")
     private WebElement searchParentButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = OPAC_SEARCH_FORM + ":searchTerm")
     private WebElement searchTermInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = OPAC_SEARCH_FORM + ":performCatalogSearch")
     private WebElement performCatalogSearchButton;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = "hitlistDialogForm:hitlistDialogTable:0:selectRecord")
     private WebElement selectRecord;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = TAB_VIEW + ":generateTitleButton")
     private WebElement generateTitleButton;
 
@@ -111,7 +111,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
     private WebElement metadataTable;
 
     public ProcessFromTemplatePage() {
-        super("pages/processFromTemplate.jsf");
+        super("pages/processFromTemplate");
     }
 
     @Override
@@ -120,11 +120,11 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
     }
 
     public WebElement getCatalogMenu() {
-        return Browser.getDriver().findElementById(OPAC_SEARCH_FORM + ":catalogueSelectMenu_input");
+        return Browser.getDriver().findElement(By.id(OPAC_SEARCH_FORM + ":catalogueSelectMenu_input"));
     }
 
     public WebElement getSearchFieldMenu() {
-        return Browser.getDriver().findElementById(OPAC_SEARCH_FORM + ":fieldSelectMenu_input");
+        return Browser.getDriver().findElement(By.id(OPAC_SEARCH_FORM + ":fieldSelectMenu_input"));
     }
 
     /**
@@ -132,7 +132,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
      * @return 'Search' button as WebElement.
      */
     public WebElement getSearchButton() {
-        return Browser.getDriver().findElementById(OPAC_SEARCH_FORM + ":performCatalogSearch");
+        return Browser.getDriver().findElement(By.id(OPAC_SEARCH_FORM + ":performCatalogSearch"));
     }
 
     /**
@@ -140,7 +140,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
      * @return template process menu
      */
     public WebElement getTemplateProcessMenu() {
-        return Browser.getDriver().findElementById("searchEditForm:processSelect_input");
+        return Browser.getDriver().findElement(By.id("searchEditForm:processSelect_input"));
     }
 
     private void selectCatalog(String catalogName) throws InterruptedException {
@@ -171,6 +171,15 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
      */
     public List<String> getImportConfigurationsTitles() {
         clickElement(catalogSelect.findElement(By.cssSelector(CSS_SELECTOR_DROPDOWN_TRIGGER)));
+        await("Wait for import configuration titles to be loaded")
+                .pollDelay(500, TimeUnit.MILLISECONDS)
+                .atMost(5, TimeUnit.SECONDS).ignoreExceptions()
+                .until(() -> {
+                    List<WebElement> items = Browser.getDriver()
+                            .findElement(By.id("catalogSearchForm:catalogueSelectMenu_items"))
+                            .findElements(By.className("ui-selectonemenu-list-item"));
+                    return !items.isEmpty() && items.stream().noneMatch(item -> item.getText().isEmpty());
+                });
         WebElement selectMenuItems = Browser.getDriver().findElement(By.id("catalogSearchForm:catalogueSelectMenu_items"));
         return selectMenuItems.findElements(By.className("ui-selectonemenu-list-item"))
                 .stream().map(WebElement::getText).collect(Collectors.toList());
@@ -363,7 +372,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
         searchTermInput.sendKeys(searchTerm);
     }
 
-    public ProcessesPage save() throws IllegalAccessException, InstantiationException {
+    public ProcessesPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getProcessesPage().getUrl());
         return Pages.getProcessesPage();
     }
@@ -372,7 +381,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
         switchToTabByIndex(index, processFromTemplateTabView);
     }
 
-    public void cancel() throws IllegalAccessException, InstantiationException {
+    public void cancel() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(cancelButton, Pages.getProjectsPage().getUrl());
         Pages.getProcessesPage();
     }
@@ -383,7 +392,7 @@ public class ProcessFromTemplatePage extends EditPage<ProcessFromTemplatePage> {
      * @param index index of checkbox to click
      */
     public void selectCheckBox(int index) {
-        metadataTable.findElements(By.className("ui-chkbox-icon")).get(index).click();
+        clickElement(metadataTable.findElements(By.className("ui-chkbox-box")).get(index));
     }
 
     /**

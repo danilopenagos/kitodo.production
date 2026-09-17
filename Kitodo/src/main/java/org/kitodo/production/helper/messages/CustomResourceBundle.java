@@ -17,8 +17,6 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.security.AccessController;
-import java.security.PrivilegedAction;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Locale;
@@ -37,7 +35,7 @@ abstract class CustomResourceBundle extends ResourceBundle {
 
     private static final Logger logger = LogManager.getLogger(CustomResourceBundle.class);
     private static URLClassLoader urlClassLoader;
-    private static Map<String, Boolean> propertiesFileExistsMap = new HashMap<String, Boolean>();
+    private static Map<String, Boolean> propertiesFileExistsMap = new HashMap<>();
 
     @Override
     public Enumeration<String> getKeys() {
@@ -61,9 +59,7 @@ abstract class CustomResourceBundle extends ResourceBundle {
             if (file.exists()) {
                 try {
                     final URL resourceURL = file.toURI().toURL();
-                    urlClassLoader = AccessController.doPrivileged(
-                        (PrivilegedAction<URLClassLoader>) () -> new URLClassLoader(new URL[] { resourceURL })
-                    );
+                    urlClassLoader = new URLClassLoader(new URL[] { resourceURL });
                 } catch (MalformedURLException e) {
                     logger.info(e.getMessage(), e);
                 }
@@ -75,7 +71,7 @@ abstract class CustomResourceBundle extends ResourceBundle {
     }
 
     /**
-     * Checks if properties file for a specfiic external resource bundle does exist.
+     * Checks if properties file for a specific external resource bundle does exist.
      * Remembers existence in static map such that filesystem is not checked repeatedly.
      * 
      * <p>This check is required because resource bundles seem to always load if an URLClassLoader
@@ -99,7 +95,7 @@ abstract class CustomResourceBundle extends ResourceBundle {
             propertiesFileExistsMap.put(key, file.exists());
 
             if (!file.exists()) {
-                logger.info("Could not find external resource bundle '" + bundleName + "' at " + file);
+                logger.info("Could not find external resource bundle '{}' at {}", bundleName, file);
             }
         }
         return propertiesFileExistsMap.get(key);
@@ -123,7 +119,7 @@ abstract class CustomResourceBundle extends ResourceBundle {
             try {
                 return ResourceBundle.getBundle(bundleName, locale, urlLoader);
             } catch (MissingResourceException e) {
-                logger.error("Could not load external resource bundle '" + bundleName + "': " + e.getMessage());
+                logger.error("Could not load external resource bundle '{}': {}", bundleName, e.getMessage());
             }
         }
         return null;

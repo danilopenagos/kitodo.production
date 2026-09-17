@@ -13,10 +13,12 @@ package org.kitodo.production.services.data;
 
 import java.io.IOException;
 import java.text.MessageFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -44,6 +46,7 @@ import org.kitodo.data.database.enums.TaskStatus;
 import org.kitodo.data.database.exceptions.DAOException;
 import org.kitodo.data.database.persistence.BaseDAO;
 import org.kitodo.data.database.persistence.TaskDAO;
+import org.kitodo.exceptions.FileStructureValidationException;
 import org.kitodo.exceptions.InvalidImagesException;
 import org.kitodo.exceptions.MediaNotFoundException;
 import org.kitodo.export.ExportDms;
@@ -61,6 +64,7 @@ import org.kitodo.production.services.file.SubfolderFactoryService;
 import org.kitodo.production.services.image.ImageGenerator;
 import org.kitodo.production.services.workflow.WorkflowControllerService;
 import org.primefaces.model.SortOrder;
+import org.xml.sax.SAXException;
 
 /**
  * The class provides a service for tasks. The service can be used to perform
@@ -70,15 +74,15 @@ import org.primefaces.model.SortOrder;
 public class TaskService extends BaseBeanService<Task, TaskDAO> {
 
     private static final Map<String, String> SORT_FIELD_MAPPING;
+    private static final String FIELD_PROCESS_ID = "process.id";
 
     static {
         SORT_FIELD_MAPPING = new HashMap<>();
         SORT_FIELD_MAPPING.put("title", "title");
-        SORT_FIELD_MAPPING.put("title.keyword", "title");
-        SORT_FIELD_MAPPING.put("processForTask.id", "process.id");
-        SORT_FIELD_MAPPING.put("processForTask.title.keyword", "process.title");
+        SORT_FIELD_MAPPING.put("process.id", "process.id");
+        SORT_FIELD_MAPPING.put("process.title", "process.title");
         SORT_FIELD_MAPPING.put("processingStatus", "processingStatus");
-        SORT_FIELD_MAPPING.put("processingUser.name.keyword", "task.processingUser.surname");
+        SORT_FIELD_MAPPING.put("processingUser.surname", "processingUser.surname");
         SORT_FIELD_MAPPING.put("processingBegin", "processingBegin");
         SORT_FIELD_MAPPING.put("processingEnd", "processingEnd");
         SORT_FIELD_MAPPING.put("correctionCommentStatus", "CASE WHEN task.process IS NOT NULL AND EXISTS ("
@@ -86,8 +90,8 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
                 + "AND comment.corrected = false) THEN 4 WHEN task.process IS NOT NULL AND EXISTS ("
                 + "SELECT 1 FROM task.process.comments AS comment WHERE comment.type = 'ERROR') THEN 3 "
                 + "WHEN task.process IS NOT NULL AND EXISTS (SELECT 1 FROM task.process.comments) THEN 2 ELSE 1 END");
-        SORT_FIELD_MAPPING.put("projectForTask.title.keyword", "process.project.title");
-        SORT_FIELD_MAPPING.put("processForTask.creationDate", "process.creationDate");
+        SORT_FIELD_MAPPING.put("process.project.title", "process.project.title");
+        SORT_FIELD_MAPPING.put("process.creationDate", "process.creationDate");
     }
 
     private static final Logger logger = LogManager.getLogger(TaskService.class);
@@ -126,7 +130,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
 
     @Override
     public Long countResults(Map filters) throws DAOException {
-        return countResults(new HashMap<String, String>(filters), false, false, false, null);
+        return countResults(new HashMap<String, String>(filters), false, false, false, Collections.emptyList());
     }
 
     /**
@@ -174,7 +178,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
             boolean showAutomaticTasks, List<TaskStatus> taskStatus) throws DAOException {
 
         BeanQuery query = formBeanQuery(filters, onlyOwnTasks, hideCorrectionTasks, showAutomaticTasks, taskStatus);
-        query.performIndexSearches();
+        query.applyIndexRestriction(FIELD_PROCESS_ID);
         return count(query.formCountQuery(), query.getQueryParameters());
     }
 
@@ -216,16 +220,16 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      *            {@code null} or empty.<br>
      *            One of:<br>
      *            <ul>
-     *            <li>"title.keyword": Title</li>
-     *            <li>"processForTask.id": Process ID</li>
-     *            <li>"processForTask.title.keyword": Process</li>
+     *            <li>"title": Title</li>
+     *            <li>"process.id": Process ID</li>
+     *            <li>"process.title": Process</li>
      *            <li>"processingStatus": Status</li>
-     *            <li>"processingUser.name.keyword": Last editing user</li>
+     *            <li>"processingUser.surname": Last editing user</li>
      *            <li>"processingBegin": Start of work</li>
      *            <li>"processingEnd": End of work</li>
      *            <li>"correctionCommentStatus": Comments</li>
-     *            <li>"projectForTask.title.keyword": Project</li>
-     *            <li>"processForTask.creationDate": Duration (Process)
+     *            <li>"process.project.title": Project</li>
+     *            <li>"process.creationDate": Duration (Process)
      *            [sic!]</li>
      *            </ul>
      * @param sortOrder
@@ -255,7 +259,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
 
         BeanQuery query = formBeanQuery(filters, onlyOwnTasks, hideCorrectionTasks, showAutomaticTasks, taskStatus);
         query.defineSorting(SORT_FIELD_MAPPING.get(sortField), sortOrder);
-        query.performIndexSearches();
+        query.applyIndexRestriction(FIELD_PROCESS_ID);
         return getByQuery(query.formQueryForAll(), query.getQueryParameters(), offset, limit);
     }
 
@@ -263,9 +267,13 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
             boolean showAutomaticTasks, List<TaskStatus> taskStatus) {
         BeanQuery query = new BeanQuery(Task.class);
         query.restrictToClient(ServiceManager.getUserService().getSessionClientId());
-        Collection<Integer> projectIDs = ServiceManager.getUserService().getCurrentUser().getProjects()
-                .stream().filter(Project::isActive).map(Project::getId).collect(Collectors.toList());
+        Collection<Integer> projectIDs = ServiceManager.getUserService()
+                .getCurrentUser()
+                .getProjects().stream()
+                .map(Project::getId)
+                .collect(Collectors.toList());
         query.restrictToProjects(projectIDs);
+        query.addBooleanRestriction("process.project.active", Boolean.TRUE);
         List<Role> userRoles = ServiceManager.getUserService().getCurrentUser().getRoles();
         final Client currentClient = ServiceManager.getUserService().getSessionClientOfAuthenticatedUser();
         List<Role> userClientRoles = userRoles.stream().filter(role -> Objects.equals(role.getClient(), currentClient))
@@ -287,7 +295,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
         if (!showAutomaticTasks) {
             query.addBooleanRestriction("typeAutomatic", Boolean.FALSE);
         }
-        if (!taskStatus.isEmpty()) {
+        if (Objects.nonNull(taskStatus) && !taskStatus.isEmpty()) {
             query.addInCollectionRestriction("processingStatus", taskStatus);
         }
         return query;
@@ -304,38 +312,52 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      */
     public void replaceProcessingUser(Task task, User user) {
         User currentProcessingUser = task.getProcessingUser();
-
         if (Objects.isNull(user) && Objects.isNull(currentProcessingUser)) {
             logger.info("do nothing - there is neither a new nor an old user");
         } else if (Objects.isNull(user)) {
-            currentProcessingUser.getProcessingTasks().remove(task);
             task.setProcessingUser(null);
         } else if (Objects.isNull(currentProcessingUser)) {
-            user.getProcessingTasks().add(task);
             task.setProcessingUser(user);
         } else if (Objects.equals(currentProcessingUser.getId(), user.getId())) {
             logger.info("do nothing - both are the same");
         } else {
-            currentProcessingUser.getProcessingTasks().remove(task);
-            user.getProcessingTasks().add(task);
             task.setProcessingUser(user);
         }
     }
 
     /**
-     * Finds all task names that each differ from any other. That means, no
+     * Retrieve and return all tasks assigned to the given user
+     * that are currently in progress and linked to a process.
+     *
+     * @param user the processing user
+     * @return list of tasks in progress for the given user
+     */
+    public List<Task> getTasksInProgress(User user) {
+        String hql = "FROM Task t WHERE t.processingUser = :user "
+                + "AND t.processingStatus = :status "
+                + "AND t.process IS NOT NULL";
+        Map<String, Object> params = Map.of(
+                "user", user,
+                "status", TaskStatus.INWORK
+        );
+        return dao.getByQuery(hql, params);
+    }
+
+    /**
+     * Finds all template task names that each differ from any other. That means, no
      * doubles.
      *
      * <p>
      * <b>API Note:</b><br>
-     * This method actually returns all task names of all clients and is
+     * This method actually returns all template task names of all clients and is
      * therefore more suitable for operational purposes, rather not for display
      * purposes.
      *
-     * @return all different task names
+     * @return all different template task names
      */
     public List<String> findTaskTitlesDistinct() throws DAOException {
         BeanQuery beanQuery = new BeanQuery(Task.class);
+        beanQuery.addNotNullRestriction("template");
         return super.dao.getStringsByQuery(beanQuery.formQueryForDistinct("title", true),
                 beanQuery.getQueryParameters());
     }
@@ -485,7 +507,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
             dd = ServiceManager.getProcessService()
                     .readMetadataFile(ServiceManager.getFileService().getMetadataFilePath(po), prefs)
                     .getDigitalDocument();
-        } catch (IOException e2) {
+        } catch (IOException | SAXException | FileStructureValidationException e2) {
             logger.error(e2);
         }
         VariableReplacer replacer = new VariableReplacer(dd.getWorkpiece(), po, task);
@@ -504,14 +526,9 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
                 CommandService commandService = ServiceManager.getCommandService();
                 CommandResult commandResult = commandService.runCommand(script);
                 executedSuccessful = commandResult.isSuccessful();
-                if (executedSuccessful && !commandResult.getMessages().isEmpty()) {
-                    for (String message : commandResult.getMessages()) {
-                        Helper.setMessage(message);
-                    }
-                }
             }
             finishOrReturnAutomaticTask(task, automatic, executedSuccessful);
-        } catch (IOException | DAOException | InvalidImagesException e) {
+        } catch (IOException | DAOException | InvalidImagesException | SAXException | FileStructureValidationException e) {
             Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
         } catch (MediaNotFoundException e) {
             Helper.setWarnMessage(e.getMessage());
@@ -559,9 +576,13 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      *             if the task cannot be saved
      * @throws IOException
      *             if the task cannot be closed
+     * @throws SAXException
+     *             if the task cannot be closed
+     * @throws FileStructureValidationException
+     *             if the task cannot be closed
      */
     private void finishOrReturnAutomaticTask(Task task, boolean automatic, boolean successful)
-            throws DAOException, IOException {
+            throws DAOException, IOException, SAXException, FileStructureValidationException {
         if (automatic) {
             task.setEditType(TaskEditType.AUTOMATIC);
             if (successful) {
@@ -606,7 +627,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
             generator.setSupervisor(executingThread);
             generator.run();
             finishOrReturnAutomaticTask(task, automatic, Objects.isNull(executingThread.getException()));
-        } catch (IOException | DAOException e) {
+        } catch (IOException | DAOException | SAXException | FileStructureValidationException e) {
             Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
         }
     }
@@ -615,9 +636,17 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      * Execute DMS export.
      *
      * @param task
-     *            as Task object
+     *          as Task object
+     * @throws DAOException
+     *          when starting export fails
+     * @throws IOException
+     *          when starting export fails
+     * @throws SAXException
+     *          when starting export fails
+     * @throws FileStructureValidationException
+     *          when starting export fails
      */
-    public void executeDmsExport(Task task) throws DAOException, IOException {
+    public void executeDmsExport(Task task) throws DAOException, IOException, SAXException, FileStructureValidationException {
         new ExportDms(task).startExport(task);
     }
 
@@ -803,7 +832,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      * @return list of tasks in work by other users
      */
     public static List<Task> getTasksInWorkByOtherUsers(List<Task> tasks) {
-        int authenticatedUserId = ServiceManager.getUserService().getAuthenticatedUser().getId();
+        int authenticatedUserId = ServiceManager.getUserService().getCurrentUser().getId();
         return tasks.stream()
                 .filter(t -> Objects.nonNull(t.getProcessingUser())
                         && authenticatedUserId != t.getProcessingUser().getId())
@@ -816,7 +845,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
      * @return list of current task options for new correction comment
      */
     public static List<Task> getCurrentTaskOptions(Process process) {
-        int authenticatedUserId = ServiceManager.getUserService().getAuthenticatedUser().getId();
+        int authenticatedUserId = ServiceManager.getUserService().getCurrentUser().getId();
         // NOTE: checking for 'INWORK' tasks that do not have a 'processingUser' shouldn't be necessary, but the current
         // version of Kitodo.Production allows setting tasks to 'INWORK' without explicitly assigning a user to it via a
         // process' task list (e.g. administrative action)
@@ -844,7 +873,7 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
             if (concurrentTasks.isEmpty()) {
                 Helper.setErrorMessage("Invalid process state: no 'inwork' or 'open' task found!");
                 return "";
-            } else if (concurrentTasks.get(0).getOrdering() == 1) {
+            } else if (concurrentTasks.getFirst().getOrdering() == 1) {
                 return Helper.getTranslation("dataEditor.comment.firstTaskInWorkflow");
             } else {
                 List<Task> tasksInWorkByOtherUsers = TaskService.getTasksInWorkByOtherUsers(concurrentTasks);
@@ -852,8 +881,8 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
                     return "";
                 } else {
                     return MessageFormat.format(Helper.getTranslation("dataEditor.comment.parallelTaskInWorkText"),
-                            tasksInWorkByOtherUsers.get(0).getTitle(),
-                            tasksInWorkByOtherUsers.get(0).getProcessingUser().getFullName());
+                            tasksInWorkByOtherUsers.getFirst().getTitle(),
+                            tasksInWorkByOtherUsers.getFirst().getProcessingUser().getFullName());
                 }
             }
         }
@@ -879,11 +908,45 @@ public class TaskService extends BaseBeanService<Task, TaskDAO> {
         List<Task> templateTasks = task.getProcess().getTemplate().getTasks().stream()
                 .filter(t -> t.getOrdering().equals(task.getOrdering()))
                 .filter(t -> t.getTitle().equals(task.getTitle()))
-                .collect(Collectors.toList());
+                .toList();
         if (templateTasks.size() == 1) {
-            return templateTasks.get(0).getId();
+            return templateTasks.getFirst().getId();
         }
         return -1;
+    }
+
+    /**
+     * Loads titles of open and in-work tasks for the given processes.
+     *
+     * @param processIds IDs of processes to load task titles for
+     * @return task titles grouped by process ID and task status
+     */
+    public Map<Integer, Map<TaskStatus, List<String>>> loadTaskTitlesForProcesses(List<Integer> processIds) throws DAOException {
+        Map<Integer, Map<TaskStatus, List<String>>> result = new HashMap<>();
+        if (Objects.isNull(processIds) || processIds.isEmpty()) {
+            return result;
+        }
+        String hql = "SELECT t.process.id, t.processingStatus, t.title "
+                        + "FROM Task t "
+                        + "WHERE t.process.id IN (:ids) "
+                        + "AND t.processingStatus IN (:open, :inwork) "
+                        + "ORDER BY t.process.id, t.processingStatus, t.ordering";
+
+        List<Object[]> rows = dao.getProjectionByQuery(hql, Map.of(
+                "ids", processIds,
+                "open", TaskStatus.OPEN,
+                "inwork", TaskStatus.INWORK
+        ));
+        for (Object[] row : rows) {
+            Integer processId = (Integer) row[0];
+            TaskStatus status = (TaskStatus) row[1];
+            String title = (String) row[2];
+            result
+                    .computeIfAbsent(processId, id -> new EnumMap<>(TaskStatus.class))
+                    .computeIfAbsent(status, s -> new ArrayList<>())
+                    .add(title);
+        }
+        return result;
     }
 
     /**

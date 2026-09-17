@@ -17,43 +17,49 @@
         xmlns:h="http://xmlns.jcp.org/jsf/html"
         xmlns:a="http://xmlns.jcp.org/jsf/passthrough"
         xmlns:p="http://primefaces.org/ui">
-    <p:remoteCommand name="removeFilter"
-                     action="#{CurrentTaskForm.filterMenu.removeFilter}"
-                     oncomplete="setFilterInputPadding()"
-                     update="tasksTabView:tasksForm:taskTable parsedFiltersForm:parsedFilters"/>
-    <p:remoteCommand name="removeFilterForEdit"
-                     action="#{CurrentTaskForm.filterMenu.removeFilter}"
-                     oncomplete="setFilterInputPadding()"
-                     update="parsedFiltersForm:parsedFilters"/>
-    <p:remoteCommand name="updateSuggestions"
-                     action="#{CurrentTaskForm.filterMenu.updateSuggestions}"
-                     update="filterOptionsForm:suggestions"/>
-    <p:remoteCommand name="submitFilters"
-                     action="#{CurrentTaskForm.filterMenu.submitFilters}"
-                     onstart="PF('taskTable').getPaginator().setPage(0);"
-                     oncomplete="setFilterInputPadding();"
-                     update="tasksTabView:tasksForm:taskTable
-                             filterInputForm:filterfield
-                             parsedFiltersForm:parsedFilters
-                             filterOptionsForm:suggestions"/>
+    <h:form id="filterCommands">
+        <p:remoteCommand name="removeFilter"
+                         id="removeFilterCommand"
+                         action="#{TaskListView.filterMenu.removeFilter}"
+                         oncomplete="setFilterInputPadding()"
+                         update="tasksTabView:tasksForm:taskTable parsedFiltersForm:parsedFilters"/>
+        <p:remoteCommand name="removeFilterForEdit"
+                         id="removeFilterForEditCommand"
+                         action="#{TaskListView.filterMenu.removeFilter}"
+                         oncomplete="setFilterInputPadding()"
+                         update="parsedFiltersForm:parsedFilters"/>
+        <p:remoteCommand name="updateSuggestions"
+                         id="updateSuggestionsCommand"
+                         action="#{TaskListView.filterMenu.updateSuggestions}"
+                         update="filterOptionsForm:suggestions"/>
+        <p:remoteCommand name="submitFilters"
+                         id="submitFiltersCommand"
+                         action="#{TaskListView.filterMenu.submitFilters}"
+                         onstart="PF('taskTable').getPaginator().setPage(0);"
+                         oncomplete="setFilterInputPadding();"
+                         update="tasksTabView:tasksForm:taskTable
+                                 filterInputForm:filterfield
+                                 parsedFiltersForm:parsedFilters
+                                 filterOptionsForm:suggestions"/>
+    </h:form>
     <div class="ui-inputgroup">
         <div class="input-wrapper">
             <h:form id="filterInputForm">
                 <p:inputText forceId="true"
                              id="filterfield"
-                             value="#{CurrentTaskForm.filterMenu.filterInEditMode}"
+                             value="#{TaskListView.filterMenu.filterInEditMode}"
                              autocomplete="off"
                              placeholder="#{msgs.filter}">
                     <p:ajax event="keydown"
                             delay="1000"
-                            listener="#{CurrentTaskForm.filterMenu.updateSuggestions(CurrentTaskForm.filterMenu.filterInEditMode)}"
+                            listener="#{TaskListView.filterMenu.updateSuggestions(TaskListView.filterMenu.filterInEditMode)}"
                             onstart="return filterKeydownEvents(event);"
                             update="filterOptionsForm:suggestions"/>
                 </p:inputText>
             </h:form>
             <h:form id="parsedFiltersForm">
                 <p:dataList id="parsedFilters"
-                            value="#{CurrentTaskForm.filterMenu.parsedFilters}"
+                            value="#{TaskListView.filterMenu.parsedFilters}"
                             var="parsedFilter"
                             emptyMessage="">
                     <p:outputPanel styleClass="plainFilter hidden">#{parsedFilter.getPlainFilter()}</p:outputPanel>
@@ -62,7 +68,7 @@
                     <p:outputPanel styleClass="value">#{parsedFilter.value}</p:outputPanel>
                     <p:commandButton title="#{msgs.removeFilter}"
                                      icon="fa fa-times"
-                                     action="#{CurrentTaskForm.filterMenu.removeFilter(parsedFilter)}"
+                                     action="#{TaskListView.filterMenu.removeFilter(parsedFilter)}"
                                      oncomplete="setFilterInputPadding()"
                                      update="tasksTabView:tasksForm:taskTable parsedFilters"/>
                 </p:dataList>
@@ -71,7 +77,7 @@
                 <div id="filterOptionsFormWrapper">
                     <!-- Suggestions -->
                     <p:dataList id="suggestions"
-                                value="#{CurrentTaskForm.filterMenu.suggestions}"
+                                value="#{TaskListView.filterMenu.suggestions}"
                                 var="menuItem"
                                 itemStyleClass="suggestion">
                         <p:outputPanel a:data-suggestion="#{menuItem.getSuggestion()}"
@@ -79,28 +85,28 @@
                     </p:dataList>
                     <!-- Options at the end of overlay panel -->
                     <p:selectManyCheckbox id="taskFilters"
-                                          value="#{CurrentTaskForm.selectedTaskFilters}"
+                                          value="#{TaskListView.selectedTaskFilters}"
                                           styleClass="switch"
                                           layout="pageDirection">
-                        <f:selectItems value="#{CurrentTaskForm.taskFilters}"
+                        <f:selectItems value="#{TaskListView.taskFilters}"
                                        var="taskFilter"
                                        itemLabel="#{msgs[taskFilter]}"/>
                         <p:ajax event="change"
                                 onstart="PF('taskTable').getPaginator().setPage(0);"
-                                listener="#{CurrentTaskForm.taskFiltersChanged}"
+                                listener="#{TaskListView.taskFiltersChanged}"
                                 update="tasksTabView:tasksForm:taskTable"/>
                     </p:selectManyCheckbox>
 
                     <p:selectManyCheckbox id="taskStatus"
-                                          value="#{CurrentTaskForm.selectedTaskStatus}"
+                                          value="#{TaskListView.selectedTaskStatus}"
                                           styleClass="switch"
                                           layout="pageDirection">
-                        <f:selectItems value="#{CurrentTaskForm.taskStatus}"
+                        <f:selectItems value="#{TaskListView.taskStatus}"
                                        var="taskStatus"
                                        itemLabel="#{msgs.processingStatus} &quot;#{msgs[taskStatus.title]}&quot;"/>
                         <p:ajax event="change"
                                 onstart="PF('taskTable').getPaginator().setPage(0);"
-                                listener="#{CurrentTaskForm.taskStatusChanged}"
+                                listener="#{TaskListView.taskStatusChanged}"
                                 update="tasksTabView:tasksForm:taskTable"/>
                     </p:selectManyCheckbox>
 
@@ -113,17 +119,17 @@
                 <ul>
                     <li>
                         <p:commandButton id="addFilter"
-                                         action="#{CurrentTaskForm.addFilterToUser}"
+                                         action="#{TaskListView.addFilterToUser}"
                                          icon="fa fa-floppy-o fa-lg"
                                          value="#{msgs.addFilter}" update="@form"/>
                     </li>
-                    <ui:repeat value="#{CurrentTaskForm.userFilters}" var="filter">
+                    <ui:repeat value="#{TaskListView.userFilters}" var="filter">
                         <li>
                             <p:commandLink value="#{filter}"
-                                           action="#{CurrentTaskForm.changeFilter(filter)}"
+                                           action="#{TaskListView.changeFilter(filter)}"
                                            title="#{filter}"/>
                             <p:commandLink title="#{msgs.removeFilter}"
-                                           action="#{CurrentTaskForm.removeFilterFromUser(filter)}"
+                                           action="#{TaskListView.removeFilterFromUser(filter)}"
                                            styleClass="filter-delete plain"
                                            update="@form">
                                 <i class="fa fa-trash-o fa-lg"/>

@@ -14,9 +14,10 @@ package org.kitodo.production.forms;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
-import javax.faces.view.ViewScoped;
-import javax.inject.Named;
+import jakarta.faces.view.ViewScoped;
+import jakarta.inject.Named;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -26,13 +27,16 @@ import org.kitodo.production.enums.ObjectType;
 import org.kitodo.production.helper.Helper;
 import org.kitodo.production.model.LazyBeanModel;
 import org.kitodo.production.services.ServiceManager;
+import org.primefaces.model.SortMeta;
+import org.primefaces.model.SortOrder;
 
 @Named("MappingFileListView")
 @ViewScoped
-public class MappingFileListView extends BaseForm {
+public class MappingFileListView extends BaseListView {
+
+    public static final String VIEW_PATH = MessageFormat.format(REDIRECT_PATH, "projects") + "&tab=mappingFilesTab";
 
     private static final Logger logger = LogManager.getLogger(MappingFileListView.class);
-    private final String mappingFileEditPath = MessageFormat.format(REDIRECT_PATH, "mappingFileEdit");
 
     /**
      * Empty default constructor that also sets the LazyBeanModel instance of
@@ -41,6 +45,7 @@ public class MappingFileListView extends BaseForm {
     public MappingFileListView() {
         super();
         super.setLazyBeanModel(new LazyBeanModel(ServiceManager.getMappingFileService()));
+        sortBy = SortMeta.builder().field("title").order(SortOrder.ASCENDING).build();
     }
 
     /**
@@ -64,7 +69,7 @@ public class MappingFileListView extends BaseForm {
      * @return path to 'mappingFileEdit' view
      */
     public String newMappingFile() {
-        return mappingFileEditPath;
+        return MappingFileEditView.VIEW_PATH;
     }
 
     /**
@@ -78,6 +83,16 @@ public class MappingFileListView extends BaseForm {
         } catch (DAOException e) {
             Helper.setErrorMessage(ERROR_DELETING, new Object[] {ObjectType.MAPPING_FILE.getTranslationSingular() }, logger, e);
         }
+    }
+
+    /**
+     * The set of allowed sort fields (columns) to sanitize the URL query parameter "sortField".
+     * 
+     * @return the set of allowed sort fields (columns)
+     */
+    @Override
+    protected Set<String> getAllowedSortFields() {
+        return Set.of("title", "file", "inputMetadataFormat", "outputMetadataFormat", "prestructuredImport");
     }
 
 }

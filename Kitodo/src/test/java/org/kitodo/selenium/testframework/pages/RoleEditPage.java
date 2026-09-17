@@ -23,24 +23,24 @@ public class RoleEditPage extends EditPage<RoleEditPage> {
 
     private static final String ROLE_TAB_VIEW = EDIT_FORM + ":roleTabView";
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = ROLE_TAB_VIEW)
     private WebElement roleTabView;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = ROLE_TAB_VIEW + ":titleInput")
     private WebElement titleInput;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = ROLE_TAB_VIEW + ":authoritiesGlobalPick")
     private WebElement globalAuthoritiesPickList;
 
-    @SuppressWarnings("unused")
+    @SuppressWarnings(UNUSED)
     @FindBy(id = ROLE_TAB_VIEW + ":authoritiesClientPick")
     private WebElement clientAuthoritiesPickList;
 
     public RoleEditPage() {
-        super("pages/roleEdit.jsf");
+        super("pages/roleEdit");
     }
 
     @Override
@@ -97,7 +97,7 @@ public class RoleEditPage extends EditPage<RoleEditPage> {
         return this;
     }
 
-    public UsersPage save() throws IllegalAccessException, InstantiationException {
+    public UsersPage save() throws ReflectiveOperationException {
         clickButtonAndWaitForRedirect(saveButton, Pages.getUsersPage().getUrl());
         return Pages.getUsersPage();
     }

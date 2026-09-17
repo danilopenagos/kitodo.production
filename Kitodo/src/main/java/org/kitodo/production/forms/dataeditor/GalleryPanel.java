@@ -28,11 +28,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import javax.faces.context.FacesContext;
+import jakarta.faces.context.FacesContext;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.kitodo.api.dataeditor.rulesetmanagement.RulesetManagementInterface;
@@ -192,7 +193,11 @@ public class GalleryPanel {
 
         int toStripeIndex = getDropStripeIndex(dropId);
         if (toStripeIndex == -1 || !dragStripeIndexMatches(dragId)) {
-            logger.error("Unsupported drag'n'drop event from {} to {}", dragId, dropId);
+            logger.error(
+                "Unsupported drag'n'drop event from '{}' to '{}'", 
+                StringEscapeUtils.escapeJava(dragId), 
+                StringEscapeUtils.escapeJava(dropId)
+            );
             return;
         }
 
@@ -233,7 +238,7 @@ public class GalleryPanel {
         
         dataEditor.getSelectedMedia().clear();
         GalleryStripe toStripe = stripes.get(toStripeIndex);
-        List<View> movedViews = viewsToBeMoved.stream().map(Pair::getKey).collect(Collectors.toList());
+        List<View> movedViews = viewsToBeMoved.stream().map(Pair::getKey).toList();
         for (GalleryMediaContent toStripeMedia : toStripe.getMedias()) {
             if (movedViews.contains(toStripeMedia.getView())) {
                 select(toStripeMedia, toStripe, "multi");
@@ -631,7 +636,7 @@ public class GalleryPanel {
             for (int i = firstIndices.getKey(); i <= stripes.size() - 1; i++) {
                 stripesWithinRange.add(stripes.get(i));
             }
-            stripesWithinRange.add(stripes.get(0));
+            stripesWithinRange.add(stripes.getFirst());
         } else if (firstIndices.getKey() != 0 && firstIndices.getKey() < lastIndices.getKey()) {
             // count up first stripe and last stripe are not "unstructured media"
             for (int i = firstIndices.getKey(); i <= lastIndices.getKey(); i++) {
@@ -639,7 +644,7 @@ public class GalleryPanel {
             }
         } else if (firstIndices.getKey() == 0) {
             // count down, first stripe is "unstructured media"
-            stripesWithinRange.add(stripes.get(0));
+            stripesWithinRange.add(stripes.getFirst());
             for (int i = stripes.size() - 1; i >= lastIndices.getKey(); i--) {
                 stripesWithinRange.add(stripes.get(i));
             }
@@ -699,7 +704,7 @@ public class GalleryPanel {
     private List<Pair<PhysicalDivision, LogicalDivision>> getMediaForwards(Integer firstIndex, Integer lastIndex,
                                                                               List<GalleryStripe> galleryStripes) {
         List<Pair<PhysicalDivision, LogicalDivision>> mediaWithinRange = new LinkedList<>();
-        GalleryStripe firstStripe = galleryStripes.get(0);
+        GalleryStripe firstStripe = galleryStripes.getFirst();
 
         if (galleryStripes.size() == 1) {
             for (int i = firstIndex; i <= lastIndex; i++) {
@@ -732,7 +737,7 @@ public class GalleryPanel {
     private List<Pair<PhysicalDivision, LogicalDivision>> getMediaBackwards(Integer firstIndex, Integer lastIndex,
                                                                                List<GalleryStripe> galleryStripes) {
         List<Pair<PhysicalDivision, LogicalDivision>> mediaWithinRange = new LinkedList<>();
-        GalleryStripe firstStripe = galleryStripes.get(0);
+        GalleryStripe firstStripe = galleryStripes.getFirst();
 
         if (galleryStripes.size() == 1) {
             for (int i = firstIndex; i >= lastIndex; i--) {
@@ -788,7 +793,11 @@ public class GalleryPanel {
                 if (Objects.nonNull(galleryStripe)) {
                     return dataEditor.isSelected(physicalDivision, galleryStripe.getStructure());
                 } else {
-                    return dataEditor.isSelected(physicalDivision, getLogicalStructureOfMedia(galleryMediaContent).getStructure());
+                    GalleryStripe logicalStructure = getLogicalStructureOfMedia(galleryMediaContent);
+                    if (Objects.nonNull(logicalStructure)) {
+                        return dataEditor.isSelected(physicalDivision, logicalStructure.getStructure());
+                    }
+                    return false;
                 }
             }
         }
@@ -836,7 +845,7 @@ public class GalleryPanel {
             Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
         }
 
-        String scrollScripts = "scrollToSelectedTreeNode();scrollToSelectedPaginationRow();";
+        String scrollScripts = "scrollToSelectedTreeNode();";
         if (GalleryViewMode.PREVIEW.equals(galleryViewMode)) {
             PrimeFaces.current().executeScript(
                     "checkScrollPosition();metadataEditor.detailMap.update();metadataEditor.gallery.mediaView.update();" + scrollScripts);
@@ -849,7 +858,7 @@ public class GalleryPanel {
         LogicalDivision logicalDivision = stripes.get(Integer.parseInt(stripeIndex)).getStructure();
         try {
             dataEditor.updateSelection(Collections.emptyList(), Collections.singletonList(logicalDivision));
-            PrimeFaces.current().executeScript("scrollToSelectedTreeNode();scrollToSelectedPaginationRow();");
+            PrimeFaces.current().executeScript("scrollToSelectedTreeNode();");
         } catch (NoSuchMetadataFieldException e) {
             Helper.setErrorMessage(e.getLocalizedMessage(), logger, e);
         }
@@ -898,13 +907,13 @@ public class GalleryPanel {
      * @param selectionType the type of selection based on the pressed modifier key
      */
     private void select(GalleryMediaContent currentSelection, GalleryStripe parentStripe, String selectionType) {
-        if (Objects.isNull(parentStripe)) {
-            parentStripe = getLogicalStructureOfMedia(currentSelection);
-        }
-
         if (Objects.isNull(currentSelection)) {
             Helper.setErrorMessage("Passed GalleryMediaContent must not be null.");
             return;
+        }
+
+        if (Objects.isNull(parentStripe)) {
+            parentStripe = getLogicalStructureOfMedia(currentSelection);
         }
 
         switch (selectionType) {
@@ -930,7 +939,7 @@ public class GalleryPanel {
         if (Objects.nonNull(
                 physicalDivision) && physicalDivision.hasMediaPartial() && !physicalDivision.getLogicalDivisions()
                 .isEmpty()) {
-            logicalDivision = physicalDivision.getLogicalDivisions().get(0);
+            logicalDivision = physicalDivision.getLogicalDivisions().getFirst();
         }
         dataEditor.getSelectedMedia().add(new ImmutablePair<>(physicalDivision, logicalDivision));
     }
@@ -946,7 +955,7 @@ public class GalleryPanel {
             return;
         }
 
-        Pair<PhysicalDivision, LogicalDivision> firstSelectedMediaPair = dataEditor.getSelectedMedia().get(0);
+        Pair<PhysicalDivision, LogicalDivision> firstSelectedMediaPair = dataEditor.getSelectedMedia().getFirst();
         Pair<PhysicalDivision, LogicalDivision> lastSelectedMediaPair =
                 new ImmutablePair<>(currentSelection.getView().getPhysicalDivision(), parentStripe.getStructure());
 
@@ -1045,7 +1054,7 @@ public class GalleryPanel {
             return false;
         }
 
-        PhysicalDivision firstPhysicalDivision = medias.get(0).getView().getPhysicalDivision();
+        PhysicalDivision firstPhysicalDivision = medias.getFirst().getView().getPhysicalDivision();
         if (Objects.isNull(firstPhysicalDivision)) {
             return false;
         }

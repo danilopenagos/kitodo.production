@@ -15,7 +15,7 @@ var interval;
 var structureInterval;
 
 function atTop(scrollableContent) {
-    return scrollableContent.scrollTop() <= 0
+    return scrollableContent.scrollTop() <= 0;
 }
 
 function atBottom(scrollableContent) {
@@ -63,7 +63,7 @@ var scrollUp = function (elementID, triggerCompleteFunction) {
     if (triggerCompleteFunction) {
         scrollableContent.animate({
             scrollTop: scrollableContent.scrollTop() - SCROLL_SPEED
-        }, 90, null, checkScrollPosition(scrollableContent));
+        }, 90, null, () => checkScrollPosition(scrollableContent));
     } else {
         scrollableContent.animate({
             scrollTop: scrollableContent.scrollTop() - SCROLL_SPEED
@@ -76,7 +76,7 @@ var scrollDown = function (elementID, triggerCompleteFunction) {
     if (triggerCompleteFunction) {
         scrollableContent.animate({
             scrollTop: scrollableContent.scrollTop() + SCROLL_SPEED
-        }, 90, null, checkScrollPosition(scrollableContent));
+        }, 90, null, () => checkScrollPosition(scrollableContent));
     } else {
         scrollableContent.animate({
             scrollTop: scrollableContent.scrollTop() + SCROLL_SPEED
@@ -223,17 +223,6 @@ function scrollToSelectedTreeNode() {
         }, 180, null, null);
     }
 }
-
-function scrollToSelectedPaginationRow() {
-    let container = $("#paginationForm\\:paginationSelection .ui-selectlistbox-listcontainer");
-    let scrollTo = container.find("li.ui-state-highlight");
-    if (scrollTo.length === 1) {
-        container.animate({
-            scrollTop: scrollTo.offset().top + container.scrollTop() - container.offset().top - container.height()/2
-        }, 180, null, null);
-    }
-}
-
 
 $(document).ready(function () {
     if ($("#thumbnailStripeScrollableContent")[0] != null) {

@@ -19,9 +19,13 @@
         xmlns:p="http://primefaces.org/ui">
 
     <!--@elvariable id="id" type="java.lang.Integer"-->
+    <!--@elvariable id="referrerListOptions" type="java.lang.String"-->
+
     <f:metadata>
         <f:viewParam name="id"/>
         <f:viewAction action="#{importConfigurationEditView.load(id)}"/>
+        <f:viewParam name="referrerListOptions"/>
+        <f:viewAction action="#{importConfigurationEditView.setReferrerListOptionsFromTemplate(referrerListOptions)}"/>
     </f:metadata>
 
     <!--@elvariable id="isEditMode" type="boolean"-->
@@ -44,11 +48,12 @@
             <h:outputText value="#{msgs['importConfig.mode.create']}" rendered="#{isCreateMode}"/>
             <h:outputText value="#{msgs['importConfig.mode.edit']} (#{importConfigurationEditView.importConfiguration.title})" rendered="#{isEditMode}"/>
             <h:outputText value="#{msgs['importConfig.mode.view']} (#{importConfigurationEditView.importConfiguration.title})" rendered="#{isViewMode}"/>
+            <h:outputText styleClass="set-apart" value="(#{msgs.id}: #{importConfigurationEditView.importConfiguration.id})" rendered="#{isEditMode or isViewMode}"/>
         </h3>
 
         <p:button id="cancel" value="#{msgs.cancel}"
                   onclick="setConfirmUnload(false);"
-                  outcome="projects?keepPagination=true"
+                  outcome="projects?tab=importConfigurationsTab&amp;#{importConfigurationEditView.referrerListOptions}"
                   icon="fa fa-times fa-lg" iconPos="right"
                   styleClass="secondary"/>
         <p:commandButton id="save"
@@ -72,7 +77,7 @@
         <p:tabView id="importConfigurationTabView">
             <p:tab id="detailsTab" title="#{msgs.details}">
                 <p:panelGrid id="importConfiguration-grid" columns="2" layout="grid">
-                    <p:row>
+                    <p:panel styleClass="column-wrapper">
                         <div>
                             <p:outputLabel for="title" value="#{msgs.title} *"/>
                             <p:inputText id="title"
@@ -102,8 +107,8 @@
                             <p:tooltip for="descriptionHelp"
                                        value="#{msgs['tooltip.importConfig.descriptionHelp']}"/>
                         </div>
-                    </p:row>
-                    <p:row>
+                    </p:panel>
+                    <p:panel styleClass="column-wrapper">
                         <div>
                             <p:outputLabel for="configurationType" value="#{msgs['importConfig.field.configurationType']} *"/>
                             <p:selectOneMenu id="configurationType" styleClass="input-with-button"
@@ -124,7 +129,7 @@
                             <p:tooltip for="configurationTypeHelp"
                                        value="#{msgs['tooltip.importConfig.configurationTypeHelp']}"/>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
 
                 <h:panelGroup layout="block"
@@ -151,7 +156,7 @@
                 <p:panelGrid columns="1"
                              layout="grid"
                              id="mappingFiles">
-                    <p:row>
+                    <p:panel styleClass="column-wrapper">
                         <div>
                             <!--@elvariable id="mappingfile" type="org.kitodo.data.database.beans.MappingFile"-->
                             <p:pickList id="mappingFilesPicklist"
@@ -171,7 +176,7 @@
                                 <f:facet name="targetCaption">#{msgs.assigned}</f:facet>
                             </p:pickList>
                         </div>
-                    </p:row>
+                    </p:panel>
                 </p:panelGrid>
             </p:tab>
 
@@ -182,7 +187,7 @@
                              layout="grid"
                              id="clients-grid">
                     <p:selectManyCheckbox id="clientsList"
-                                          layout="grid"
+                                          layout="responsive"
                                           validator="ImportConfigurationClientValidator"
                                           columns="1"
                                           collectionType="java.util.ArrayList"
@@ -207,8 +212,8 @@
     </ui:define>
 
     <ui:define name="breadcrumbs">
-        <p:menuitem value="#{msgs.desktop}" url="desktop.jsf" icon="fa fa-home"/>
-        <p:menuitem value="#{msgs.projects}" url="projects.jsf" icon="fa fa-archive"/>
+        <p:menuitem value="#{msgs.desktop}" url="desktop" icon="fa fa-home"/>
+        <p:menuitem value="#{msgs.projects}" url="projects" icon="fa fa-archive"/>
         <p:menuitem value="#{msgs['importConfig.mode.edit']}" rendered="#{isEditMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['importConfig.mode.create']}" rendered="#{isCreateMode}" icon="fa fa-cogs"/>
         <p:menuitem value="#{msgs['importConfig.mode.view']}" rendered="#{isViewMode}" icon="fa fa-cogs"/>
